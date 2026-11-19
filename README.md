@@ -1,8 +1,8 @@
-# seofessionals three.js Demo 5
+# three.js Demo 5
 
 Ein Bauzeitenplan, angedockt am unteren Bildschirmrand, und darüber die Baustelle. Mit dem Mausrad bewegt sich die Heute-Linie: Ein Bauzaun entsteht, die Grube wird ausgehoben, ein Kran setzt jeden Rahmen, jedes Wand- und Dachelement, während sich sein Balken füllt. Bei der Übergabe öffnet sich die Haustür, und Sie gehen hinein. Scrollen Sie zurück, und das Haus baut sich wieder ab.
 
-[**Live ansehen**](https://seofessionals-3js.github.io/seofessionals-threejs-demo-5/?dir=a) · [**Startprompt**](PROMPT.md) · [**Alle Demos**](https://seofessionals-3js.github.io/seofessionals-threejs-demos/)
+[**Live ansehen**](https://seofessionals-3js.github.io/threejs-demo-5/?dir=a) · [**Startprompt**](PROMPT.md) · [**Alle Demos**](https://seofessionals-3js.github.io/threejs-demos/)
 
 Die Seite öffnet in Woche 7, mitten im Bau. `?dir=a&wk=0&open` startet stattdessen mit dem vollständigen Bauzeitenplan in Woche 0. Ziehen Sie am Diagramm, um zu spulen, oder drücken Sie ▶ BAUEN.
 
@@ -34,6 +34,6 @@ Dann http://localhost:8000/ öffnen. Am besten auf einem Laptop mit aktuellem Br
 
 ## Herkunft und Lizenz
 
-Basiert auf „Schedule Build“ aus [flat-to-3d](https://github.com/Sam1983Aing/flat-to-3d) von Samnang Aing, veröffentlicht unter der MIT-Lizenz, und für seofessionals ins Deutsche übersetzt. Die Lizenz liegt unverändert in [LICENSE](LICENSE).
+Basiert auf „Schedule Build“ aus [flat-to-3d](https://github.com/Sam1983Aing/flat-to-3d) von Samnang Aing, veröffentlicht unter der MIT-Lizenz, und ins Deutsche übersetzt. Die Lizenz liegt unverändert in [LICENSE](LICENSE).
 
 Alle Büros, Häuser, Adressen und Kontaktdaten in der Demo sind erfunden. three.js (MIT) wird von einem CDN geladen, die Schriften Chakra Petch und IBM Plex Mono von Google Fonts (SIL Open Font License).
