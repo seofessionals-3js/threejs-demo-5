@@ -1,77 +1,58 @@
-// Direction sketches for The Build. One scene, three ways of showing it.
-//   ?dir=a  The Programme: the Gantt on the left, the site on the right, one "today" line drives both.
-//   ?dir=b  The Sheet is the Site: the foundation plan and programme printed at 1:1 on the ground.
+// Projekt Steininger, built from its programme. One scene, three ways of showing it.
+//   ?dir=a  The Programme: the Gantt docked at the bottom, the site above it, one "today" line drives both.
+//   ?dir=b  The Sheet is the Site: the foundation plan and the programme printed at 1:1 on the slope.
 //   ?dir=c  Site Camera: the builder's time-lapse, the programme as a band along the bottom.
-// Other params: wk (week, 0 to 14), shot (camera), tod (hour of day), ghost (0 to 1), open (A: chart only), room (entry|living|kitchen|loft|overlook).
+// Other params: wk (week, 0 to 38), shot (camera), tod (hour of day), ghost (0 to 1), open (A: chart only),
+// room (entry|kitchen|living|stair|lounge|terrace).
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildHouse, groundWithPit, PHASES, WEEKS, C, dateAt, clamp01, smooth, HX, HZ, FL, RIDGE, MEZZ, BAYS, PIT } from './house.js';
+import { buildHouse, groundMaterial, natural, PHASES, MILESTONES, WEEKS, TOUR_W0, C, dateAt, clamp01, POOL, SITE, PIT, FOOTINGS } from './house.js';
 
+const SEQ = window.SEQ || (window.SEQ = {});
+const prefs = () => SEQ.prefs || {};
 const q = new URLSearchParams(location.search);
-const DIR = q.get('dir') || 'a';
-const INIT_WK = Math.min(WEEKS, Math.max(0, parseFloat(q.get('wk') ?? '7')));
+const DIR = ['a', 'b', 'c'].includes(q.get('dir')) ? q.get('dir') : 'a';
+const INIT_WK = Math.min(WEEKS, Math.max(0, parseFloat(q.get('wk') ?? '11.6')));
 const INIT_SHOT = q.get('shot') || 'sig';
-const INIT_TOD = parseFloat(q.get('tod') ?? '15.5');
+const INIT_TOD = parseFloat(q.get('tod') ?? '10');
 const INIT_GHOST = parseFloat(q.get('ghost') ?? (DIR === 'b' ? '1' : '0'));
 const INIT_OPEN = q.has('open');
 const INIT_ROOM = q.get('room') || null;
+const CENTER = [12, 0, -2];
 
-// ------------------------------------------------------------------ 5-Stop Multi-Room Interior Walkthrough Spline
+// ------------------------------------------------------------------ the walk through the finished house, six stops on one spline
 const INTERIOR_STOPS = [
-  {
-    id: 'entry',
-    u: 0.00,
-    tab: '01 EINGANG',
-    lv: 'STATION 01 // HÖHE +0.15M SCHWELLE',
-    title: 'Eingang',
-    spec: 'Haustür aus europäischer Eiche · Basaltschwelle · Blick ins Tragwerk',
-  },
-  {
-    id: 'living',
-    u: 0.25,
-    tab: '02 WOHNEN',
-    lv: 'STATION 02 // HÖHE +0.15M · FIRST 6.75M',
-    title: 'Wohnen & Ofen',
-    spec: 'Zweigeschossige Fichtenrahmen GL28c · gusseiserner Ofen · Bücherregal · Ostgiebel',
-  },
-  {
-    id: 'kitchen',
-    u: 0.50,
-    tab: '03 KÜCHE',
-    lv: 'STATION 03 // HÖHE +0.15M · UNTER BSP-DECKE',
-    title: 'Küche & Essen',
-    spec: 'Wasserfall-Insel aus Travertin & Eiche · Messingarmaturen · Esstisch für 6',
-  },
-  {
-    id: 'loft',
-    u: 0.82,
-    tab: '04 GALERIE',
-    lv: 'STATION 04 // HÖHE +3.05M GALERIE',
-    title: 'Die Galerie-Suite',
-    spec: '100 mm BSP-Decke, 5-lagig · Podestbett aus Eiche · Architekten-Schreibtisch',
-  },
-  {
-    id: 'overlook',
-    u: 1.00,
-    tab: '05 AUSBLICK',
-    lv: 'STATION 05 // HÖHE +3.05M GALERIEKANTE',
-    title: 'Blick von der Galerie',
-    spec: 'Glasbrüstung · zweigeschossiger Wohnraum & Gartenterrasse im Osten',
-  },
+  { id: 'entry',   u: 0.00, tab: '01 EINGANG',  lv: 'STATION 01 // HOF ±0,00',                 title: 'Eingang vom Hof',  spec: 'Tür aus Teak unter dem Vordach aus Travertin · Blick durch das Haus zum See' },
+  { id: 'kitchen', u: 0.26, tab: '02 KÜCHE',    lv: 'STATION 02 // WOHNGESCHOSS ±0,00',        title: 'Küche und Essen',  spec: 'Küchenzeile aus Nussbaum · Insel aus Travertin · Esstisch für sechs am Glas' },
+  { id: 'living',  u: 0.48, tab: '03 WOHNEN',   lv: 'STATION 03 // WOHNGESCHOSS ±0,00',        title: 'Wohnen',           spec: 'Sofa mit Blick über den Balkon · Schiebetür 2,85 m hoch · Eichendielen' },
+  { id: 'stair',   u: 0.76, tab: '04 TREPPE',   lv: 'STATION 04 // HALLE · 18 STUFEN',         title: 'Treppe hinab',     spec: 'Fertigteillauf mit Eichenstufen an der Rückwand der zweigeschossigen Halle' },
+  { id: 'lounge',  u: 0.86, tab: '05 POOLGESCHOSS', lv: 'STATION 05 // POOLGESCHOSS −3,20',    title: 'Lounge, Sauna, Billard', spec: 'Medienwand aus Nussbaum · Sauna mit Glasfront · Boden aus Travertin' },
+  { id: 'terrace', u: 1.00, tab: '06 POOL',     lv: 'STATION 06 // POOLTERRASSE −3,16',        title: 'Übergabe am Pool', spec: 'Pool 6,6 × 11,2 m auf der Böschung · darüber die Auskragung von 4,80 m' },
 ];
 
-// Keyframes along the continuous Catmull-Rom interior walkthrough spline (u in [0, 1])
+// Keyframes of the walk (u in [0, 1]): in from the court, across the living level, down the lower flight, out to the pool.
+const flightY = z => -3.2 * clamp01((-1.75 - z) / 4.8) + 1.6;
 const TOUR_KEYS = [
-  { u: 0.00, pos: [1.55, 1.58, 4.15],  at: [1.55, 1.56, -1.20], fov: 54 }, // 01 ENTRY THRESHOLD
-  { u: 0.12, pos: [1.35, 1.56, 2.55],  at: [3.60, 1.62, -1.00], fov: 58 }, // Stepping through open oak door
-  { u: 0.25, pos: [0.65, 1.58, 2.25],  at: [4.25, 1.65, -1.35], fov: 60 }, // 02 LIVING & HEARTH (bookcase + stove + sofa + east gable)
-  { u: 0.38, pos: [0.45, 1.52, 1.95],  at: [-2.80, 1.42, -0.20], fov: 58 }, // Turning west around foot of stair
-  { u: 0.50, pos: [-0.55, 1.50, 1.15], at: [-4.20, 1.38, -0.35], fov: 58 }, // 03 KITCHEN & DINING
-  { u: 0.58, pos: [0.58, 1.68, 1.35],  at: [-1.20, 2.85, -1.20], fov: 58 }, // Stepping onto bottom tread of glulam stair
-  { u: 0.67, pos: [0.58, 3.10, -0.55], at: [-2.60, 3.85, 0.35], fov: 58 }, // Ascending glulam stair
-  { u: 0.74, pos: [0.35, 4.25, -1.85], at: [-3.50, 3.75, 0.45], fov: 60 }, // Top landing on mezzanine
-  { u: 0.82, pos: [-0.45, 4.28, -1.75],at: [-3.85, 3.45, 0.95], fov: 62 }, // 04 THE LOFT SUITE (platform bed + study desk)
-  { u: 1.00, pos: [-0.32, 4.48, 0.55], at: [4.85, 1.55, -0.55], fov: 60 }, // 05 GALLERY OVERLOOK (double-height view)
+  { u: 0.00, pos: [-2.6, 1.64, 1.25],  at: [8.0, 1.5, 1.2],     fov: 52 }, // 01 on the court, the door ahead
+  { u: 0.09, pos: [2.6, 1.62, 1.25],   at: [9.5, 1.4, 0.9],     fov: 56 }, // under the canopy
+  { u: 0.17, pos: [5.4, 1.6, 0.6],     at: [9.3, 1.1, 1.9],     fov: 60 }, // inside, the kitchen to the right
+  { u: 0.26, pos: [6.9, 1.56, -2.5],   at: [9.3, 1.0, 1.9],     fov: 60 }, // 02 kitchen and island
+  { u: 0.37, pos: [9.4, 1.56, -1.7],   at: [14.3, 0.9, 1.0],    fov: 60 }, // the dining table by the glass
+  { u: 0.48, pos: [11.7, 1.56, 0.6],   at: [12.9, 0.95, -5.3],  fov: 62 }, // 03 across the living room
+  { u: 0.56, pos: [13.4, 1.6, -1.9],   at: [10.2, 1.0, -5.6],   fov: 62 }, // the sofa, the hall behind it
+  { u: 0.62, pos: [6.2, 1.6, 0.1],     at: [4.0, 1.0, -3.2],    fov: 60 }, // back to the hall
+  { u: 0.66, pos: [4.61, 1.6, -0.75],  at: [4.9, 0.2, -5.0],    fov: 60 }, // at the head of the lower flight
+  { u: 0.70, pos: [4.61, flightY(-1.75), -1.75], at: [5.2, -1.2, -6.4], fov: 60 }, // 04 down the stair
+  { u: 0.74, pos: [4.61, flightY(-3.35), -3.35], at: [6.4, -2.2, -7.0], fov: 60 },
+  { u: 0.78, pos: [4.61, flightY(-4.95), -4.95], at: [8.0, -2.3, -6.9], fov: 60 },
+  { u: 0.81, pos: [4.61, flightY(-6.55), -6.55], at: [9.5, -2.2, -6.6], fov: 60 },
+  { u: 0.86, pos: [6.6, -1.62, -6.2],  at: [12.5, -2.2, -5.9],  fov: 62 }, // 05 the lounge in front of the media wall
+  { u: 0.90, pos: [9.3, -1.62, -1.6],  at: [5.6, -2.2, 2.3],    fov: 62 }, // the sauna, the billiard table beside it
+  { u: 0.93, pos: [14.2, -1.62, -2.3], at: [19.5, -2.0, -3.7],  fov: 60 }, // towards the open door
+  { u: 0.955, pos: [17.3, -1.62, -3.85], at: [24.0, -2.5, -3.6], fov: 58 }, // on its axis
+  { u: 0.972, pos: [19.9, -1.56, -3.5], at: [26.0, -2.6, -6.0],  fov: 58 }, // out on the terrace, the pool ahead
+  { u: 0.986, pos: [22.6, -1.5, -1.9],  at: [17.5, -0.6, -6.5],  fov: 60 }, // turning round at the edge of the water
+  { u: 1.00, pos: [27.6, -1.25, -1.5],  at: [14.2, 1.5, -3.5],   fov: 64 }, // 06 back over the pool, the whole house ahead
 ];
 
 const tourPosCurve = new THREE.CatmullRomCurve3(TOUR_KEYS.map(k => new THREE.Vector3(...k.pos)), false, 'centripetal');
@@ -79,7 +60,6 @@ const tourAtCurve = new THREE.CatmullRomCurve3(TOUR_KEYS.map(k => new THREE.Vect
 
 function sampleTourSpline(u) {
   const uc = clamp01(u);
-  // Map u piecewise-linearly to spline parameter t in [0, 1] across TOUR_KEYS
   let idx = 0;
   for (let i = 0; i < TOUR_KEYS.length - 1; i++) {
     if (uc >= TOUR_KEYS[i].u && uc <= TOUR_KEYS[i + 1].u) { idx = i; break; }
@@ -103,7 +83,7 @@ function activeInteriorStop(u) {
 }
 
 const initRoomObj = INIT_ROOM ? INTERIOR_STOPS.find(s => s.id === INIT_ROOM) : null;
-const initTourVal = initRoomObj ? initRoomObj.u : (INIT_SHOT === 'inside' ? 0.25 : 0.0);
+const initTourVal = initRoomObj ? initRoomObj.u : (INIT_SHOT === 'inside' ? 0.26 : 0.0);
 
 const state = {
   dir: DIR,
@@ -125,6 +105,7 @@ const pad2 = n => String(n).padStart(2, '0');
 const fmtDay = d => d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, '');
 const weekNo = w => Math.min(WEEKS, Math.floor(w) + 1);
 const activePhases = w => PHASES.filter(p => w >= p.w0 && w < p.w1);
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 // ------------------------------------------------------------------ renderer & PBR environment
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -135,14 +116,15 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.04;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.domElement.setAttribute('aria-label', 'Projekt Steininger, ein 3D-Modell, das sich nach dem Bauzeitenplan aufbaut');
+renderer.domElement.setAttribute('role', 'img');
 document.getElementById('stage').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const bgCol = new THREE.Color(DIR === 'c' ? 0xE2E4DE : C.paper);
+const bgCol = new THREE.Color(DIR === 'c' ? 0xE1E5DC : C.paper);
 scene.background = bgCol;
-scene.fog = new THREE.Fog(bgCol, 78, 210);
+scene.fog = new THREE.Fog(bgCol, 80, 230);
 
-// Realistic interior/sky PBR reflections for VMZinc roof, anodized frames, glass, brass & oiled oak
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.65;
@@ -152,81 +134,55 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.65);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
-Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 140 });
+Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 170 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.03;
 scene.add(sun, sun.target);
 
-// Cool sky fill light from S-SE so shaded facades retain crisp board & standing-seam relief
+// Cool sky fill from the north-east, so the glass front and the shaded walls keep their relief
 const fillLight = new THREE.DirectionalLight(0xe2ebf6, 0.62);
-fillLight.position.set(16, 24, 28);
+fillLight.position.set(46, 26, -20);
 scene.add(fillLight);
 
+// The sun at an hour of the day, in the season the week falls in: March to November.
 function placeSun(hour, week) {
   const phi = (hour - 12) / 6 * Math.PI / 2;
-  const elMax = THREE.MathUtils.degToRad(38 + 22 * week / WEEKS);
+  const elMax = THREE.MathUtils.degToRad(Math.max(30, 40 + 23 * Math.sin(2 * Math.PI * week / 52)));
   const el = Math.max(THREE.MathUtils.degToRad(5), elMax * Math.sin(Math.PI * clamp01((hour - 5) / 15)));
   const d = new THREE.Vector3(-Math.sin(phi) * Math.cos(el), Math.sin(el), Math.cos(phi) * Math.cos(el));
-  sun.position.copy(d.multiplyScalar(60));
-  sun.target.position.set(0, 0, 0);
+  sun.target.position.set(...CENTER);
+  sun.position.copy(d.multiplyScalar(75)).add(sun.target.position);
   const warm = 1 - clamp01((el - 0.12) / 0.5);
   sun.color.set(0xfff4e6).lerp(new THREE.Color(0xffc48a), warm * 0.8);
   sun.intensity = 2.65 * (0.55 + 0.45 * clamp01(el / 0.5));
   return el;
 }
 
-// ------------------------------------------------------------------ the house
-const house = buildHouse({ ghost: DIR === 'b', lawn: DIR !== 'b' });
-scene.add(house.root);
-
-// ------------------------------------------------------------------ ground
-const SHEET = { x0: -24, x1: 24, z0: -12, z1: 18 };
+// ------------------------------------------------------------------ the ground and the house
+const SHEET = { x0: -12, x1: 40, z0: -15, z1: 24 };
+const SHEET_PX = 80;
+const uvSheet = (x, z) => [(x - SHEET.x0) / (SHEET.x1 - SHEET.x0), 1 - (z - SHEET.z0) / (SHEET.z1 - SHEET.z0)];
+const GANTT_BOX = { x0: -9.5, x1: 23.5, z0: 9.6, z1: 21.6 }, GANTT_LAB = 7.2;
+const INK = '#10241a', LEAF = '#5fa512';
+const LABEL_FONT = "Arimo, 'Helvetica Neue', Arial, sans-serif", DISPLAY_FONT = "'BBH Bogle', Arimo, 'Arial Black', sans-serif";
+let planWalls = [];   // filled once the house is built; the sheet is drawn again then
 let sheetTex = null;
 let sheetBaseCanvas = null;
 let sheetWorkCanvas = null;
-let groundMat;
-if (DIR === 'b') {
-  sheetTex = drawSheet(state.wk);
-  groundMat = new THREE.MeshStandardMaterial({ map: sheetTex, roughness: 0.96, envMapIntensity: 0.25 });
-  const us = new THREE.Shape([[-400, -400], [400, -400], [400, 400], [-400, 400]].map(([x, z]) => new THREE.Vector2(x, -z)));
-  us.holes.push(new THREE.Path([[SHEET.x0, SHEET.z0], [SHEET.x0, SHEET.z1], [SHEET.x1, SHEET.z1], [SHEET.x1, SHEET.z0]].map(([x, z]) => new THREE.Vector2(x, -z))));
-  const under = new THREE.Mesh(new THREE.ShapeGeometry(us).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xE5E0D5, roughness: 1, envMapIntensity: 0.2 }));
-  under.position.y = -0.02; under.receiveShadow = true;
-  scene.add(under);
-} else if (DIR === 'c') {
-  groundMat = new THREE.MeshStandardMaterial({ color: 0xD2CFB4, roughness: 0.96, envMapIntensity: 0.25 });
-} else {
-  groundMat = new THREE.MeshStandardMaterial({ color: C.paper, roughness: 0.96, envMapIntensity: 0.2 });
-}
-const uvSheet = (x, z) => [(x - SHEET.x0) / (SHEET.x1 - SHEET.x0), 1 - (z - SHEET.z0) / (SHEET.z1 - SHEET.z0)];
-let ground, cap;
-if (DIR === 'b') {
-  const r = groundWithPit(groundMat, { size: 1, uv: uvSheet });
-  const s = new THREE.Shape([[SHEET.x0, SHEET.z0], [SHEET.x1, SHEET.z0], [SHEET.x1, SHEET.z1], [SHEET.x0, SHEET.z1]].map(([x, z]) => new THREE.Vector2(x, -z)));
-  s.holes.push(new THREE.Path([[PIT.x0, PIT.z0], [PIT.x0, PIT.z1], [PIT.x1, PIT.z1], [PIT.x1, PIT.z0]].map(([x, z]) => new THREE.Vector2(x, -z))));
-  const g = new THREE.ShapeGeometry(s).rotateX(-Math.PI / 2);
-  const p = g.attributes.position, u = g.attributes.uv;
-  for (let i = 0; i < p.count; i++) { const [a, b] = uvSheet(p.getX(i), p.getZ(i)); u.setXY(i, a, b); }
-  ground = new THREE.Mesh(g, groundMat); ground.receiveShadow = true;
-  cap = r.cap;
-} else {
-  ({ ground, cap } = groundWithPit(groundMat));
-}
-scene.add(ground, cap);
+const groundMat = DIR === 'b' ? groundMaterial({ color: 0xE9E9E4, map: drawSheet(state.wk), contour: 0 })
+  : DIR === 'c' ? groundMaterial({ color: 0xD3D2B6, contour: 0.08, mud: 1 })
+  : groundMaterial({ color: 0xE2E0D3, contour: 0.2 });
 
-let mudMesh = null;
-if (DIR === 'c') {
-  const S = house.SITE;
-  const s = new THREE.Shape([[S.x0, S.z0], [S.x1, S.z0], [S.x1, S.z1], [S.x0, S.z1]].map(([x, z]) => new THREE.Vector2(x, -z)));
-  s.holes.push(new THREE.Path([[PIT.x0, PIT.z0], [PIT.x0, PIT.z1], [PIT.x1, PIT.z1], [PIT.x1, PIT.z0]].map(([x, z]) => new THREE.Vector2(x, -z))));
-  mudMesh = new THREE.Mesh(new THREE.ShapeGeometry(s).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: C.mud, roughness: 0.98, envMapIntensity: 0.2 }));
-  mudMesh.position.y = 0.004; mudMesh.receiveShadow = true;
-  mudMesh.visible = state.wk > 0.25 && state.wk < 13.3;
-  scene.add(mudMesh);
-}
+const house = buildHouse({ ghost: DIR === 'b', lawn: DIR !== 'b', groundMat, groundUV: DIR === 'b' ? uvSheet : null });
+scene.add(house.root);
+planWalls = house.planWalls;
+
 if (DIR === 'a') {
-  const S = house.SITE, y = 0.01, m = 1.5;
-  const pts = [[S.x0 - m, S.z0 - m], [S.x1 + m, S.z0 - m], [S.x1 + m, S.z1 + m], [S.x0 - m, S.z1 + m], [S.x0 - m, S.z0 - m]].map(([x, z]) => new THREE.Vector3(x, y, z));
+  // the boundary of the site, dashed across the slope
+  const m = 1.5, pts = [];
+  const run = (x0, z0, x1, z1) => { const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 1.5); for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n, z = z0 + (z1 - z0) * i / n; pts.push(new THREE.Vector3(x, natural(x, z) + 0.05, z)); } };
+  run(SITE.x0 - m, SITE.z0 - m, SITE.x1 + m, SITE.z0 - m); run(SITE.x1 + m, SITE.z0 - m, SITE.x1 + m, SITE.z1 + m);
+  run(SITE.x1 + m, SITE.z1 + m, SITE.x0 - m, SITE.z1 + m); run(SITE.x0 - m, SITE.z1 + m, SITE.x0 - m, SITE.z0 - m);
   const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: C.ink, dashSize: 1.2, gapSize: 0.4, transparent: true, opacity: 0.42 }));
   l.computeLineDistances();
   scene.add(l);
@@ -234,32 +190,30 @@ if (DIR === 'a') {
 
 // ------------------------------------------------------------------ cameras
 const SHOTS = {
-  sig:      { pos: [19, 8.6, 21],     at: [0.2, 2.6, 0],     fov: 34 },
-  a2:       { pos: [22, 15, 25],      at: [0, 0, 0.5],       fov: 32 },
-  top:      { pos: [0, 48.5, 3.05],   at: [0, 0, 3.0],       fov: 34 },
-  b2:       { pos: [6, 25, 24],       at: [0, 0, 3.0],       fov: 36 },
-  b3:       { pos: [15.5, 9.8, 23],   at: [-1.2, 2.2, 3.4],  fov: 38 },
+  sig:      { pos: [53, 21, 40],        at: [13.5, -1.2, 0.8],   fov: 34 },
+  a2:       { pos: [44, 31, 31],        at: [10.5, -2.2, -1.5],  fov: 32 },
+  top:      { pos: [13.5, 76, 4.56],    at: [13.5, 0, 4.5],      fov: 34 },
+  b2:       { pos: [27, 36, 38],        at: [12, -3, 3.5],       fov: 36 },
+  b3:       { pos: [40, 17, 32],        at: [12.5, -1.5, 3.0],   fov: 38 },
   inside:   sampleTourSpline(initTourVal),
-  cam:      { pos: [18.5, 9.2, 20.5], at: [-0.6, 2.0, -0.6], fov: 37 },
-  path:     { pos: [6.5, 1.65, 20.5], at: [1.2, 3.1, 0],     fov: 42 },
+  cam:      { pos: [50, 16.5, 34],      at: [14, -0.8, -0.4],    fov: 38 },
+  path:     { pos: [-11, 1.7, 6.5],     at: [6, 3.2, -1.2],      fov: 46 },
 };
 
 const curCamPos = new THREE.Vector3(...(SHOTS[state.shot] || SHOTS.sig).pos);
 const curCamAt = new THREE.Vector3(...(SHOTS[state.shot] || SHOTS.sig).at);
 let curCamFov = (SHOTS[state.shot] || SHOTS.sig).fov;
 
-const camera = new THREE.PerspectiveCamera(curCamFov, innerWidth / innerHeight, 0.08, 600);
+const camera = new THREE.PerspectiveCamera(curCamFov, innerWidth / innerHeight, 0.08, 700);
 
 function getTargetCameraPose(shotKey) {
-  if (shotKey === 'inside') {
-    return sampleTourSpline(state.tour);
-  }
+  if (shotKey === 'inside') return sampleTourSpline(state.tour);
   return SHOTS[shotKey] || SHOTS.sig;
 }
 
 function applyCamera(shotKey, lerpFactor = 1) {
   const s = getTargetCameraPose(shotKey);
-  if (lerpFactor >= 0.999) {
+  if (lerpFactor >= 0.999 || prefs().calm) {
     curCamPos.set(...s.pos);
     curCamAt.set(...s.at);
     curCamFov = s.fov;
@@ -281,20 +235,20 @@ function applyCamera(shotKey, lerpFactor = 1) {
   camera.lookAt(curCamAt);
 }
 
-// Compute automatic camera shot when user scrolls through the 14 weeks
+// The camera that follows the weeks once the visitor has moved
 function autoShotForWeek(w) {
   if (!state.userMoved) return state.shot;
   if (state.dir === 'a') {
-    if (w < 1.8) return 'a2';
-    if (w >= 13.38) return 'inside';
+    if (w < 3.3) return 'a2';
+    if (w >= TOUR_W0) return 'inside';
     return 'sig';
   } else if (state.dir === 'b') {
-    if (w < 0.45 || w >= 13.6) return 'top';
-    if (w < 2.6) return 'b2';
+    if (w < 1.0 || w >= 37.7) return 'top';
+    if (w < 6.0) return 'b2';
     return 'b3';
   } else {
-    if (w >= 13.48) return 'inside';
-    if (w >= 13.2) return 'path';
+    if (w >= TOUR_W0 + 0.08) return 'inside';
+    if (w >= 36.8) return 'path';
     return 'cam';
   }
 }
@@ -303,39 +257,47 @@ function updateSceneForWeek(w, lerpCam = 1) {
   const targetShot = state.camMode === 'auto' ? autoShotForWeek(w) : state.camMode;
   state.shot = targetShot;
 
-  // When entering the house automatically via scroll/scrub in week 13.38..14.0, drive the 5-room tour spline
+  // Once the house is handed over, the last weeks of the scroll drive the walk through it
   if (targetShot === 'inside' && state.userMoved && !state.roomPinned) {
-    const startW = state.dir === 'c' ? 13.48 : 13.38;
+    const startW = state.dir === 'c' ? TOUR_W0 + 0.08 : TOUR_W0;
     state.targetTour = clamp01((w - startW) / Math.max(0.01, WEEKS - startW));
-    if (lerpCam >= 0.999) state.tour = state.targetTour;
+    if (lerpCam >= 0.999 || prefs().calm) state.tour = state.targetTour;
   }
 
   applyCamera(targetShot, lerpCam);
 
   if (state.userMoved) {
     if (state.dir === 'c') {
-      state.tod = 7.3 + (w / WEEKS) * 11.1;
+      state.tod = 7.3 + (w / WEEKS) * 9.6;
     } else if (state.dir === 'b') {
-      state.ghost = w < 0.35 || w > 13.5 ? 0 : w < 2.2 ? 0.45 : 1.0;
+      state.ghost = w < 0.9 || w > 37.0 ? 0 : w < 5.5 ? 0.45 : 1.0;
     }
   }
-  const hour = state.dir === 'c' ? state.tod : state.dir === 'b' ? 13.6 : 15.5;
+  const hour = state.dir === 'c' ? state.tod : state.dir === 'b' ? 12.6 : 10;
   placeSun(hour, w);
   hemi.intensity = state.shot === 'inside' ? 1.65 : 1.25;
   scene.environmentIntensity = state.shot === 'inside' ? 0.82 : 0.65;
-  if (state.dir === 'c') hemi.color.set(0xf4f7ff);
+  if (state.dir === 'c') { hemi.color.set(0xf4f7ff); groundMat.userData.u.uMud.value = w > 0.5 && w < 36.4 ? 1 : 0; }
 
-  if (mudMesh) mudMesh.visible = w > 0.25 && w < 13.3;
-  house.update(w, { ghost: state.ghost, cap });
+  house.update(w, { ghost: state.ghost, calm: prefs().calm, snap: lerpCam >= 0.999 });
 }
 
 updateSceneForWeek(state.wk, 1);
 
 // ------------------------------------------------------------------ the programme SVG, drawn from PHASES
+// The colours follow the view options: higher contrast darkens every tone, larger labels scale the type.
+function chartLook() {
+  const hi = !!prefs().contrast, big = prefs().large ? 1.16 : 1;
+  const rgb = hi ? '6,20,13' : '16,36,26';
+  const a = v => `rgba(${rgb},${Math.min(1, hi ? v * 1.7 : v)})`;
+  return { ink: `rgb(${rgb})`, a, leaf: hi ? '#3d7607' : '#5fa512', leafInk: hi ? '#2c5903' : '#3d7607', lime: '#c4f03e', paper: '#f1f0e6', big, font: "Arimo, 'Helvetica Neue', Arial, sans-serif" };
+}
+
 function programmeSVG(T, W, H, o = {}) {
+  const L = chartLook(), f = n => (n * L.big).toFixed(1);
   const compact = !!o.compact;
   const showDur = o.showDur ?? !compact;
-  const labelW = o.labelW ?? (compact ? 176 : 210);
+  const labelW = (o.labelW ?? (compact ? 176 : 210)) * (L.big > 1 ? 1.08 : 1);
   const durW = showDur ? 48 : 0;
   const headH = compact ? 22 : 54;
   const rows = PHASES.length;
@@ -344,38 +306,31 @@ function programmeSVG(T, W, H, o = {}) {
   const x0 = labelW, x1 = Math.max(x0 + 50, W - durW);
   const X = w => x0 + (x1 - x0) * w / WEEKS;
   const Y = i => headH + i * rowH;
-  const ink = 'var(--ink)', acc = 'var(--accent)';
+  const txt = (x, y, size, str, fill, o2 = {}) => `<text x="${x}" y="${y}" font-family="${L.font}" font-size="${f(size)}" font-weight="${o2.w || 600}" fill="${fill}" letter-spacing="${o2.ls ?? '0.08em'}"${o2.anchor ? ` text-anchor="${o2.anchor}"` : ''}>${esc(str)}</text>`;
 
-  let s = `<svg class="gantt-svg" data-x0="${x0}" data-x1="${x1}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
-  s += `<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(29,28,25,0.3)" stroke-width="1"/></pattern></defs>`;
+  let s = `<svg class="gantt-svg" role="img" aria-label="Bauzeitenplan, ${WEEKS} Wochen. Ziehen, um durch den Bau zu spulen." data-x0="${x0}" data-x1="${x1}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+  s += `<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="${L.a(0.3)}" stroke-width="1"/></pattern></defs>`;
 
   if (!compact) {
-    s += `<line x1="0" y1="${headH - 2}" x2="${W}" y2="${headH - 2}" stroke="${ink}" stroke-width="1.2"/>`;
-    s += `<text x="0" y="${headH - 23}" font-family="IBM Plex Mono" font-size="10" font-weight="600" fill="rgba(29,28,25,0.68)">PSP // PHASE</text>`;
-    s += `<text x="0" y="${headH - 9}" font-family="IBM Plex Mono" font-size="8.5" fill="rgba(29,28,25,0.5)">KRITISCHER PFAD</text>`;
-    s += `<text x="${W}" y="${headH - 23}" font-family="IBM Plex Mono" font-size="10" font-weight="600" fill="rgba(29,28,25,0.68)" text-anchor="end">DAUER</text>`;
+    s += `<line x1="0" y1="${headH - 2}" x2="${W}" y2="${headH - 2}" stroke="${L.ink}" stroke-width="1.2"/>`;
+    s += txt(0, headH - 23, 9.5, 'PSP // PHASE', L.a(0.72), { w: 700 });
+    s += txt(0, headH - 9, 8.5, 'KRITISCHER PFAD', L.a(0.6));
+    s += txt(W, headH - 23, 9.5, 'DAUER', L.a(0.72), { w: 700, anchor: 'end' });
   } else {
-    s += `<line x1="0" y1="${headH - 2}" x2="${W}" y2="${headH - 2}" stroke="rgba(29,28,25,0.28)" stroke-width="1"/>`;
-    s += `<text x="0" y="14" font-family="IBM Plex Mono" font-size="9.5" font-weight="600" fill="rgba(29,28,25,0.68)">PSP // KRITISCHER PFAD</text>`;
-    if (showDur) s += `<text x="${W}" y="14" font-family="IBM Plex Mono" font-size="9.5" font-weight="600" fill="rgba(29,28,25,0.68)" text-anchor="end">DAUER</text>`;
+    s += `<line x1="0" y1="${headH - 2}" x2="${W}" y2="${headH - 2}" stroke="${L.a(0.28)}" stroke-width="1"/>`;
+    s += txt(0, 14, 9, 'PSP // KRITISCHER PFAD', L.a(0.72), { w: 700 });
+    if (showDur) s += txt(W, 14, 9, 'DAUER', L.a(0.72), { w: 700, anchor: 'end' });
   }
 
+  // the weeks: a tick for each, a number for every second one, the months underneath on the full sheet
+  const colW = (x1 - x0) / WEEKS, every = colW >= 26 * L.big ? 1 : colW >= 13 * L.big ? 2 : 4;
   for (let k = 0; k <= WEEKS; k++) {
     const x = X(k);
-    s += `<line x1="${x}" y1="${compact ? 0 : headH - 10}" x2="${x}" y2="${H - msH}" stroke="rgba(29,28,25,${k % 4 === 0 ? 0.24 : 0.1})" stroke-width="1"/>`;
+    s += `<line x1="${x}" y1="${compact ? 0 : headH - 10}" x2="${x}" y2="${H - msH}" stroke="${L.a(k % 4 === 0 ? 0.24 : 0.09)}" stroke-width="1"/>`;
     if (k < WEEKS) {
-      const d = dateAt(k);
-      if (compact) {
-        s += `<text x="${X(k + 0.5)}" y="14" font-family="IBM Plex Mono" font-size="9.5" font-weight="600" fill="${ink}" text-anchor="middle">WO ${pad2(k + 1)}</text>`;
-      } else {
-        s += `<text x="${X(k + 0.5)}" y="${headH - 23}" font-family="IBM Plex Mono" font-size="10.5" font-weight="600" fill="${ink}" text-anchor="middle">${pad2(k + 1)}</text>`;
-        const prev = k ? dateAt(k - 1) : null;
-        if (o.dates) {
-          s += `<text x="${X(k + 0.5)}" y="${headH - 9}" font-family="IBM Plex Mono" font-size="8.5" fill="rgba(29,28,25,0.55)" text-anchor="middle">${d.getDate()} ${d.toLocaleDateString('de-DE', { month: 'short' }).replace('.', '').toUpperCase()}</text>`;
-        } else if (!prev || prev.getMonth() !== d.getMonth()) {
-          s += `<text x="${X(k) + 3}" y="${headH - 9}" font-family="IBM Plex Mono" font-size="8.5" font-weight="500" fill="rgba(29,28,25,0.58)">${d.toLocaleDateString('de-DE', { month: 'short' }).replace('.', '').toUpperCase()}</text>`;
-        }
-      }
+      const d = dateAt(k), prev = k ? dateAt(k - 1) : null;
+      if ((k + 1) % every === 0) s += txt(X(k + 0.5), compact ? 14 : headH - 23, compact ? 9 : 10, pad2(k + 1), L.ink, { w: 700, anchor: 'middle', ls: '0.02em' });
+      if (!compact && (!prev || prev.getMonth() !== d.getMonth())) s += txt(X(k) + 3, headH - 9, 8.5, d.toLocaleDateString('de-DE', { month: 'short' }).replace('.', '').toUpperCase(), L.a(0.66));
     }
   }
 
@@ -383,65 +338,58 @@ function programmeSVG(T, W, H, o = {}) {
     const y = Y(i), bh = rowH * (compact ? 0.58 : 0.45), by = y + (rowH - bh) / 2;
     const live = T >= p.w0 && T < p.w1, done = T >= p.w1;
     s += `<g class="gantt-row" data-phase="${p.n}" data-w0="${p.w0}" data-w1="${p.w1}">`;
-    s += `<rect class="row-bg" x="0" y="${y}" width="${W}" height="${rowH}" fill="${live ? 'rgba(232,93,4,0.08)' : 'transparent'}"/>`;
-    s += `<line x1="0" y1="${y + rowH}" x2="${W}" y2="${y + rowH}" stroke="rgba(29,28,25,0.11)"/>`;
+    s += `<rect class="row-bg" x="0" y="${y}" width="${W}" height="${rowH}" fill="${live ? 'rgba(95,165,18,0.12)' : 'transparent'}"/>`;
+    s += `<line x1="0" y1="${y + rowH}" x2="${W}" y2="${y + rowH}" stroke="${L.a(0.11)}"/>`;
 
-    const fs = compact ? 11 : 13.5;
-    s += `<text x="0" y="${y + rowH / 2 + fs * 0.35}" font-family="IBM Plex Mono" font-size="${compact ? 9.5 : 10.5}" fill="${live ? acc : done ? ink : 'rgba(29,28,25,0.55)'}" font-weight="${live ? 600 : 500}">${pad2(p.n)}</text>`;
-    s += `<text x="${compact ? 24 : 30}" y="${y + rowH / 2 + fs * 0.35}" font-family="Chakra Petch" font-size="${fs}" fill="${ink}" font-weight="${live ? 700 : 600}" letter-spacing="0.03em">${p.name.toUpperCase()}</text>`;
+    const fs = compact ? 10.5 : 12.5, base = y + rowH / 2 + fs * L.big * 0.35;
+    s += txt(0, base, compact ? 9 : 10, pad2(p.n + 1), live ? L.leafInk : done ? L.ink : L.a(0.6), { w: 700, ls: '0.02em' });
+    s += txt(compact ? 24 : 30, base, fs, p.name.toUpperCase(), L.ink, { w: 700, ls: '0.06em' });
 
-    s += `<rect x="${X(p.w0)}" y="${by}" width="${Math.max(2, X(p.w1) - X(p.w0))}" height="${bh}" fill="url(#hatch)" stroke="${ink}" stroke-width="1"/>`;
+    s += `<rect x="${X(p.w0)}" y="${by}" width="${Math.max(2, X(p.w1) - X(p.w0))}" height="${bh}" fill="url(#hatch)" stroke="${L.ink}" stroke-width="1"/>`;
     const pe = Math.min(T, p.w1);
-    if (pe > p.w0) {
-      s += `<rect x="${X(p.w0)}" y="${by}" width="${Math.max(1, X(pe) - X(p.w0))}" height="${bh}" fill="${live ? acc : ink}"/>`;
-    }
-    if (showDur) {
-      const days = Math.round((p.w1 - p.w0) * 5);
-      s += `<text x="${W}" y="${y + rowH / 2 + 3.5}" font-family="IBM Plex Mono" font-size="9.5" fill="${live ? acc : 'rgba(29,28,25,0.65)'}" font-weight="${live ? 600 : 400}" text-anchor="end">${days} T</text>`;
-    }
+    if (pe > p.w0) s += `<rect x="${X(p.w0)}" y="${by}" width="${Math.max(1, X(pe) - X(p.w0))}" height="${bh}" fill="${live ? L.leaf : L.ink}"/>`;
+    if (showDur) s += txt(W, y + rowH / 2 + 3.5, 9, `${Math.round((p.w1 - p.w0) * 5)} T`, live ? L.leafInk : L.a(0.7), { w: live ? 700 : 500, anchor: 'end', ls: '0.04em' });
     if (i < rows - 1) {
       const n = PHASES[i + 1];
-      if (n.w0 >= p.w1 - 0.25) {
-        s += `<path d="M${X(p.w1)} ${by + bh / 2} H${X(n.w0) - 5} V${Y(i + 1) + rowH / 2}" fill="none" stroke="rgba(29,28,25,0.38)" stroke-width="1"/>`;
-      } else {
-        s += `<path d="M${X(n.w0) - 5} ${by + bh} V${Y(i + 1) + rowH / 2} H${X(n.w0)}" fill="none" stroke="rgba(29,28,25,0.38)" stroke-width="1"/>`;
-      }
+      if (n.w0 >= p.w1 - 0.25) s += `<path d="M${X(p.w1)} ${by + bh / 2} H${X(n.w0) - 5} V${Y(i + 1) + rowH / 2}" fill="none" stroke="${L.a(0.38)}" stroke-width="1"/>`;
+      else s += `<path d="M${X(n.w0) - 5} ${by + bh} V${Y(i + 1) + rowH / 2} H${X(n.w0)}" fill="none" stroke="${L.a(0.38)}" stroke-width="1"/>`;
     }
     s += `</g>`;
   });
 
   if (!compact) {
     const my = H - msH / 2 + 3;
-    s += `<text x="0" y="${my + 4}" font-family="IBM Plex Mono" font-size="10" font-weight="600" fill="rgba(29,28,25,0.65)">MEILENSTEINE</text>`;
-    for (const [w, name] of [[3.6, 'M1 · Bodenplatte'], [10.6, 'M2 · Dicht'], [14, 'M3 · Schlüssel']]) {
-      const x = X(w), on = T >= w - 0.02;
-      s += `<path d="M${x} ${my - 6} L${x + 6} ${my} L${x} ${my + 6} L${x - 6} ${my} Z" fill="${on ? acc : 'var(--paper)'}" stroke="${ink}" stroke-width="1.2"/>`;
-      s += `<text x="${x + (w > 10 ? -10 : 10)}" y="${my + 4}" font-family="IBM Plex Mono" font-size="10" font-weight="${on ? 600 : 400}" fill="${ink}" text-anchor="${w > 10 ? 'end' : 'start'}">${name.toUpperCase()}</text>`;
+    s += txt(0, my + 4, 9.5, 'MEILENSTEINE', L.a(0.7), { w: 700 });
+    for (const [w, name] of MILESTONES) {
+      const x = X(w), on = T >= w - 0.02, left = w > WEEKS * 0.6;
+      s += `<path d="M${x} ${my - 6} L${x + 6} ${my} L${x} ${my + 6} L${x - 6} ${my} Z" fill="${on ? L.leaf : L.paper}" stroke="${L.ink}" stroke-width="1.2"/>`;
+      s += txt(x + (left ? -10 : 10), my + 4, 9.5, name.toUpperCase(), L.ink, { w: on ? 700 : 500, anchor: left ? 'end' : 'start' });
     }
   }
 
   const tx = X(T);
-  s += `<line x1="${tx}" y1="0" x2="${tx}" y2="${H - (compact ? 0 : msH - 6)}" stroke="${acc}" stroke-width="${compact ? 2 : 2}"/>`;
+  s += `<line x1="${tx}" y1="0" x2="${tx}" y2="${H - (compact ? 0 : msH - 6)}" stroke="${L.leaf}" stroke-width="2"/>`;
   const lab = `HEUTE · ${fmtDay(dateAt(T)).toUpperCase()}`;
-  const lw = lab.length * 6.2 + 12;
+  const lw = (lab.length * 6.4 + 14) * L.big;
   const lx = Math.min(Math.max(tx - lw / 2, x0), W - lw);
-  s += `<rect x="${lx}" y="${compact ? -10 : -6}" width="${lw}" height="15" fill="${acc}"/>`;
-  s += `<text x="${lx + lw / 2}" y="${compact ? 1 : 6}" font-family="IBM Plex Mono" font-size="9" font-weight="600" fill="#fff" text-anchor="middle" letter-spacing="0.04em">${lab}</text>`;
+  s += `<rect x="${lx}" y="${compact ? -11 : -7}" width="${lw}" height="${16 * L.big}" fill="${L.ink}"/>`;
+  s += `<text x="${lx + lw / 2}" y="${compact ? 0.5 * L.big : 4.5 * L.big}" font-family="${L.font}" font-size="${f(9)}" font-weight="700" fill="${L.lime}" text-anchor="middle" letter-spacing="0.08em">${lab}</text>`;
   return s + '</svg>';
 }
 
-// ------------------------------------------------------------------ CAD Mode & Telemetry Control Bar + HUD
+// ------------------------------------------------------------------ the CAD bar and the HUD
 const hud = document.getElementById('hud');
-
-function renderCadHudBrackets() {
-  return `<div id="cad-hud"><div class="ch-c tl"></div><div class="ch-c tr"></div><div class="ch-c bl"></div><div class="ch-c br"></div></div>`;
-}
+hud.innerHTML = '<div id="hud-bar"></div><div id="hud-body"></div>';
+const hudBar = hud.firstChild, hudBody = hud.lastChild;
+const BRAND = '<span class="brand-badge">Projekt Steininger</span>';
+const META = `<span><b>HAUS AM HANG</b></span><span>START MO 1. MÄR 2027</span><span>SCHLÜSSEL FR 19. NOV 2027</span><span>BGF 480 M² · STAHLBETON, TRAVERTIN</span>`;
+const META_SHORT = `<span><b>HAUS AM HANG</b></span><span>START 1. MÄR 2027</span><span>SCHLÜSSEL 19. NOV 2027</span><span>BGF 480 M²</span>`;
 
 function renderCadBar() {
-  const centerTop = state.dir === 'b' || state.dir === 'c' || state.open;
   const wkStr = `WO ${pad2(Math.floor(state.wk))}.${Math.floor((state.wk % 1) * 10)}`;
+  const cam = (k, label, title) => `<button class="cad-btn ${state.camMode === k || (k === 'inside' && state.shot === 'inside') ? 'on' : ''}" data-cam="${k}" title="${title}" aria-pressed="${state.camMode === k}">${label}</button>`;
   return `
-    <div class="cad-bar ${centerTop ? 'center-top' : ''}">
+    <div class="cad-bar" role="toolbar" aria-label="Variante, Kamera und Bauwoche">
       <div class="grp">
         <span class="grp-lbl">VAR</span>
         <button class="cad-btn ${state.dir === 'a' ? 'on' : ''}" data-dir="a" title="Variante A: Der Bauzeitenplan">A // PLAN</button>
@@ -450,53 +398,63 @@ function renderCadBar() {
       </div>
       <div class="grp grp-cam">
         <span class="grp-lbl">KAM</span>
-        <button class="cad-btn ${state.camMode === 'auto' ? 'on' : ''}" data-cam="auto">AUTO</button>
-        <button class="cad-btn ${state.camMode === 'sig' ? 'on' : ''}" data-cam="sig">ISO</button>
-        <button class="cad-btn ${state.camMode === 'a2' ? 'on' : ''}" data-cam="a2">HOCH</button>
-        <button class="cad-btn ${state.camMode === 'top' ? 'on' : ''}" data-cam="top">OBEN</button>
-        <button class="cad-btn ${state.camMode === 'path' ? 'on' : ''}" data-cam="path">WEG</button>
-        <button class="cad-btn ${state.camMode === 'inside' || state.shot === 'inside' ? 'on' : ''}" data-cam="inside">INNEN</button>
+        ${cam('auto', 'AUTO', 'Die Kamera folgt den Wochen')}${cam('sig', 'ISO', 'Schrägansicht von Südosten')}${cam('a2', 'HOCH', 'Hohe Schrägansicht')}${cam('top', 'OBEN', 'Draufsicht')}${cam('path', 'HOF', 'Auf Augenhöhe im Hof')}${cam('inside', 'INNEN', 'Rundgang durch das Haus')}
       </div>
       <div class="grp">
-        <button class="cad-btn play-btn ${state.playing ? 'on' : ''}" data-action="play">${state.playing ? '❚❚ PAUSE' : '▶ BAUEN'}</button>
         <div class="cad-scrub">
-          <input type="range" min="0" max="14" step="0.02" value="${state.wk.toFixed(2)}" aria-label="Bauwoche wählen">
+          <input type="range" min="0" max="${WEEKS}" step="0.05" value="${state.wk.toFixed(2)}" aria-label="Bauwoche wählen" aria-valuetext="Woche ${weekNo(state.wk)} von ${WEEKS}">
           <span class="wk-readout">${wkStr}</span>
         </div>
       </div>
     </div>`;
 }
 
-function renderRoomOrPhaseCard(T, splitVp = false) {
+let barKey = '';
+function renderBar() {
+  const key = [state.dir, state.camMode, state.shot === 'inside'].join('|');
+  if (key !== barKey) { barKey = key; hudBar.innerHTML = renderCadBar(); bindBarEvents(); return; }
+  const sl = hudBar.querySelector('input[type="range"]');
+  sl.value = state.wk.toFixed(2);
+  sl.setAttribute('aria-valuetext', `Woche ${weekNo(state.wk)} von ${WEEKS}`);
+  hudBar.querySelector('.wk-readout').textContent = `WO ${pad2(Math.floor(state.wk))}.${Math.floor((state.wk % 1) * 10)}`;
+}
+
+// the part in work, as three lines: what it is, how big, what it is made of
+const pieceHtml = p => `<span class="piece"><b>${esc(p.name)}</b><span class="dm">${esc(p.dims)}</span><span>${esc(p.mat)}</span></span>`;
+
+const roomTabs = (isInside, curStop) => `<div class="room-tabs" role="group" aria-label="Stationen des Rundgangs">${INTERIOR_STOPS.map(st => `<button class="room-tab ${isInside && curStop.id === st.id ? 'on' : ''}" data-room="${st.id}">${st.tab}</button>`).join('')}</div>`;
+
+// what is being built this week, as words
+function nowText(T) {
+  const live = activePhases(T);
+  return {
+    names: live.map(p => p.name),
+    title: live.length ? live.map(p => p.name).join(' + ') : 'Schlüsselübergabe',
+    spec: live.length ? live[live.length - 1].spec : 'Das Haus ist fertig · Scrollen oder eine Station wählen, um hineinzugehen',
+    code: live.length ? live.map(p => p.code).join('+') : 'ST-10',
+  };
+}
+
+function renderRoomOrPhaseCard(T) {
   const isInside = state.shot === 'inside';
   const curStop = activeInteriorStop(state.tour);
-  const showRoomTabs = isInside || T >= 13.1;
-  const tabsHtml = showRoomTabs ? `
-    <div class="room-tabs">
-      ${INTERIOR_STOPS.map(st => `<button class="room-tab ${isInside && curStop.id === st.id ? 'on' : ''}" data-room="${st.id}">${st.tab}</button>`).join('')}
-    </div>` : '';
-
+  const tabsHtml = isInside || T >= 36.9 ? roomTabs(isInside, curStop) : '';
+  const piece = isInside ? null : house.label();
   if (isInside) {
     return `
-      <div class="room-card ${splitVp ? 'split-vp' : ''}">
+      <div class="room-card">
         <span class="lv">${curStop.lv}</span>
         <b>${curStop.title}</b>
         <span class="nt">${curStop.spec}</span>
         ${tabsHtml}
       </div>`;
   }
-
-  const pct = Math.round(100 * T / WEEKS);
-  const livePhases = activePhases(T);
-  const nowTitle = livePhases.length ? livePhases.map(p => p.name).join(' + ') : (T >= WEEKS ? 'Fertigstellung' : 'Baustelleneinrichtung');
-  const activeSpec = livePhases.length ? livePhases[livePhases.length - 1].spec : (T >= WEEKS ? 'Schlüsselübergabe · Scrollen oder unten einen Raum wählen, um hineinzugehen' : 'Bauzaun · Baucontainer · Schnurgerüst');
-  const activeCode = livePhases.length ? livePhases.map(p => p.code).join('+') : (T >= WEEKS ? 'TR-10' : 'TR-01');
-
+  const N = nowText(T);
   return `
-    <div class="room-card ${splitVp ? 'split-vp' : ''}">
-      <span class="lv">${activeCode} // WK ${pad2(weekNo(T))} · ${pct}% FERTIG</span>
-      <b>${nowTitle}</b>
-      <span class="nt">${activeSpec}</span>
+    <div class="room-card">
+      <span class="lv">${N.code} // WO ${pad2(weekNo(T))} · ${Math.round(100 * T / WEEKS)}% FERTIG</span>
+      <b>${N.title}</b>
+      ${piece ? pieceHtml(piece) : `<span class="nt">${N.spec}</span>`}
       ${tabsHtml}
     </div>`;
 }
@@ -505,223 +463,253 @@ function renderHud() {
   const T = state.wk;
   const day = dateAt(T);
   const pct = Math.round(100 * T / WEEKS);
-  const livePhases = activePhases(T);
-  const nowNames = livePhases.map(p => p.name);
-  const activeSpec = livePhases.length ? livePhases[livePhases.length - 1].spec : (T >= WEEKS ? 'Fertigstellung · Scrollen oder einen Raum wählen, um hineinzugehen' : 'Baustelleneinrichtung · Bauzaun');
-  const activeCode = livePhases.length ? livePhases.map(p => p.code).join('+') : (T >= WEEKS ? 'TR-10' : 'TR-01');
+  const N = nowText(T);
   const curStop = activeInteriorStop(state.tour);
   const isInside = state.shot === 'inside';
+  const piece = isInside ? null : house.label();
+  document.body.classList.toggle('open', state.dir === 'a' && state.open);
+  renderBar();
 
   if (state.dir === 'a') {
     if (state.open) {
-      hud.innerHTML = `
-        ${renderCadHudBrackets()}
-        ${renderCadBar()}
+      hudBody.innerHTML = `
         <div class="prog full">
           <div class="top mono">
-            <span class="brand-badge">PURLIN</span>
-            <span class="dwg-tag">PLAN 08-101 · REV C</span>
+            ${BRAND}
+            <span class="dwg-tag">BLATT A-905 · BAUZEITENPLAN</span>
           </div>
-          <h1>Ihr Haus in<br><em>14 Wochen.</em></h1>
-          <div class="meta mono">
-            <span><b>FENWICK LANE</b></span>
-            <span>START MO 1. MÄR 2027</span>
-            <span>SCHLÜSSEL FR 4. JUN 2027</span>
-            <span>BGF 142 M² · GL28c</span>
-          </div>
+          <h1>Ihr Haus in<br><em>38 Wochen.</em></h1>
+          <div class="meta mono">${META}</div>
           <div class="chart"></div>
           <div class="foot">
             <div class="hint mono"><i></i>Jeder Balken ist ein Teil des Hauses. Scrollen oder ziehen Sie den Zeitplan, um es zu bauen.</div>
-            <div class="note mono">HOLZRAHMEN · 142 M² · 3 ZIMMER<span class="spec-line">CPM-BASISPLAN // 70 ARBEITSTAGE</span></div>
+            <div class="note mono">Konzept, UX &amp; three.js-Umsetzung // <b>Micha Schwan</b> · UX Designer // <a href="mailto:schwanmicha07@gmail.com">schwanmicha07@gmail.com</a></div>
           </div>
         </div>`;
-      const ch = hud.querySelector('.chart');
+      const ch = hudBody.querySelector('.chart');
       const r = ch.getBoundingClientRect();
-      ch.innerHTML = programmeSVG(T, r.width, r.height, { labelW: 236, dates: true });
+      ch.innerHTML = programmeSVG(T, r.width, r.height, { labelW: 236 });
     } else {
-      const sideLv = isInside ? curStop.lv : `${activeCode} // ${pct}% FERTIG · KAM ${state.shot.toUpperCase()}`;
-      const sideTitle = isInside ? curStop.title : (nowNames.join(' + ') || (T >= WEEKS ? 'Fertigstellung' : 'Baustelleneinrichtung'));
-      const sideSpec = isInside ? curStop.spec : activeSpec;
-      const roomTabsHtml = `<div class="room-tabs">${INTERIOR_STOPS.map(st => `<button class="room-tab ${isInside && curStop.id === st.id ? 'on' : ''}" data-room="${st.id}">${st.tab}</button>`).join('')}</div>`;
-
-      hud.innerHTML = `
-        ${renderCadHudBrackets()}
-        ${renderCadBar()}
+      const sideLv = isInside ? curStop.lv : `${N.code} // ${pct}% FERTIG`;
+      const sideTitle = isInside ? curStop.title : N.title;
+      const sideSpec = isInside ? curStop.spec : N.spec;
+      hudBody.innerHTML = `
         <div class="prog-hero ${isInside ? 'inside-dim' : ''}">
           <div class="top-row mono">
-            <span class="brand-badge">PURLIN</span>
-            <span class="dwg-tag">PLAN 08-101 · REV C</span>
+            ${BRAND}
+            <span class="dwg-tag">BLATT A-905 · BAUZEITENPLAN</span>
           </div>
-          <h1>Ihr Haus in <em>14 Wochen.</em></h1>
-          <div class="meta mono">
-            <span><b>FENWICK LANE</b></span>
-            <span>START 1. MÄR 2027</span>
-            <span>SCHLÜSSEL 4. JUN 2027</span>
-            <span>BGF 142 M² · GL28c</span>
-          </div>
+          <h1><span>Ihr Haus in</span> <em>38 Wochen.</em></h1>
+          <div class="meta mono">${META_SHORT}</div>
         </div>
         <div class="prog">
           <div class="prog-side">
             <div class="side-top">
-              <div class="count">Wo. ${pad2(weekNo(T))}<small> / 14</small></div>
+              <div class="count">Wo. ${pad2(weekNo(T))}<small> / ${WEEKS}</small></div>
               <span class="date-badge">${fmtDay(day).toUpperCase()} 2027</span>
             </div>
             <div class="side-body">
               <span class="lv">${sideLv}</span>
               <b class="title">${sideTitle}</b>
-              <span class="spec-line">${sideSpec}</span>
+              ${piece ? pieceHtml(piece) : `<span class="spec-line">${sideSpec}</span>`}
             </div>
-            ${roomTabsHtml}
+            ${isInside || T >= 36.9 ? roomTabs(isInside, curStop) : ''}
           </div>
           <div class="chart"></div>
         </div>`;
-      const ch = hud.querySelector('.prog .chart');
+      const ch = hudBody.querySelector('.prog .chart');
       const r = ch.getBoundingClientRect();
-      ch.innerHTML = programmeSVG(T, r.width, r.height, { compact: true, labelW: 184, showDur: true });
+      const narrow = innerWidth < 760;
+      ch.innerHTML = programmeSVG(T, r.width, r.height, { compact: true, labelW: narrow ? 136 : 172, showDur: !narrow });
     }
   } else if (state.dir === 'b') {
-    hud.innerHTML = `
-      ${renderCadHudBrackets()}
-      ${renderCadBar()}
-      <div class="corner tl">
-        <span class="brand-badge">PURLIN</span>
+    hudBody.innerHTML = `
+      <div class="corner tl mono">
+        ${BRAND}
+        <span class="dwg-tag">BLATT A-905 · Fundamentplan &amp; Bauzeitenplan · Maßstab 1:1</span>
       </div>
-      <div class="corner tr mono" style="color:var(--ink-2)">
-        <b style="color:var(--ink)">PLAN 08-101</b> · Fundamentplan &amp; Bauzeitenplan · Maßstab 1:1
-      </div>
-      ${renderRoomOrPhaseCard(T, false)}
-      <div class="corner br mono" style="color:var(--ink-2)">
-        <b style="color:var(--ink)">${fmtDay(day).toUpperCase()} 2027</b> · [${activeCode}]<br>Scrollen oder Regler ziehen: bauen &amp; hineingehen
+      ${renderRoomOrPhaseCard(T)}
+      <div class="corner br mono">
+        <b>${fmtDay(day).toUpperCase()} 2027</b> · [${N.code}]<br>Scrollen oder Regler ziehen: bauen &amp; hineingehen
       </div>`;
   } else {
-    const hh = Math.floor(state.tod), mm = Math.round((state.tod - hh) * 60);
+    const hh = Math.floor(state.tod), mm = Math.round((state.tod - hh) * 60) % 60;
     const inside = state.shot === 'path' || state.shot === 'inside';
-    const showTabs = inside || T >= 13.1;
-    hud.innerHTML = `
-      ${renderCadHudBrackets()}
-      ${renderCadBar()}
+    hudBody.innerHTML = `
       <div class="cam ${inside ? 'inside' : ''}">
         ${inside ? '' : '<div class="frame"></div>'}
-        <div class="corner tl" style="top:28px;left:32px;padding:0;border:0;background:transparent">
-          <span class="brand-badge">${inside ? 'PURLIN' : 'CAM 02'}</span>
+        <div class="corner tl mono">
+          <span class="brand-badge ${inside ? '' : 'cam-badge'}">${inside ? 'Projekt Steininger' : 'Cam 02'}</span>
+          <span class="stamp">${fmtDay(day).toUpperCase()} 2027 · ${pad2(hh)}:${pad2(mm)}</span>
         </div>
-        <div class="corner tr stamp" style="top:28px;right:32px">${fmtDay(day).toUpperCase()} 2027 · ${pad2(hh)}:${pad2(mm)}</div>
         <div class="band">
           <div class="now">
-            <div class="wk">Wo. ${pad2(weekNo(T))}<small> / 14 · ${pct}%</small></div>
+            <div class="wk">Wo. ${pad2(weekNo(T))}<small> / ${WEEKS} · ${pct}%</small></div>
             <div class="ph mono">
               ${state.shot === 'inside'
-                ? `<b>${curStop.title.toUpperCase()}</b><div style="color:rgba(242,239,231,0.78);font-size:9.5px;margin-top:2px">${curStop.spec}</div>`
-                : `${T >= WEEKS ? '<b>SCHLÜSSEL ÜBERGEBEN</b>' : `[${activeCode}] <b>${nowNames.join(' + ') || 'BAUSTELLE AKTIV'}</b>`}
-                   <div style="color:rgba(242,239,231,0.78);font-size:9.5px;margin-top:2px">${activeSpec}</div>`}
-              ${showTabs ? `<div class="room-tabs" style="margin-top:6px;padding-top:5px">${INTERIOR_STOPS.map(st => `<button class="room-tab ${state.shot === 'inside' && curStop.id === st.id ? 'on' : ''}" data-room="${st.id}">${st.tab}</button>`).join('')}</div>` : ''}
+                ? `<b>${curStop.title.toUpperCase()}</b><div class="sub">${curStop.spec}</div>`
+                : `${T >= WEEKS ? '<b>SCHLÜSSEL ÜBERGEBEN</b>' : `[${N.code}] <b>${N.names.join(' + ') || 'ÜBERGABE'}</b>`}${piece ? pieceHtml(piece) : `<div class="sub">${N.spec}</div>`}`}
+              ${inside || T >= 36.9 ? roomTabs(state.shot === 'inside', curStop) : ''}
             </div>
           </div>
           <div class="chart"></div>
         </div>
       </div>`;
-    const ch = hud.querySelector('.band .chart');
+    const ch = hudBody.querySelector('.band .chart');
     const r = ch.getBoundingClientRect();
-    ch.innerHTML = programmeSVG(T, r.width, r.height, { compact: true, labelW: 168 });
+    ch.innerHTML = programmeSVG(T, r.width, r.height, { compact: true, labelW: innerWidth < 760 ? 136 : 160 });
   }
   bindHudEvents();
+  if (SEQ.say) SEQ.say(isInside ? `${curStop.title}. ${curStop.spec}` : `Woche ${weekNo(T)} von ${WEEKS}, ${N.title}. ${piece ? `${piece.name}, ${piece.dims}, ${piece.mat}` : N.spec}`);
+  // the label at the part keeps clear of whatever is docked at the bottom
+  const dock = hudBody.querySelector('.prog:not(.full), .band, .room-card');
+  tagBottom = (dock ? dock.getBoundingClientRect().top : innerHeight) - 14;
+}
+
+// ------------------------------------------------------------------ the label at the part in work, with a leader to it
+const tag = document.createElement('div');
+tag.id = 'part-tag'; tag.setAttribute('aria-hidden', 'true');
+tag.innerHTML = '<svg><line></line><circle r="4"></circle></svg><div class="box"><span class="lv"></span><b></b><span class="dm"></span><span class="nt"></span></div>';
+document.body.appendChild(tag);
+const tagBox = tag.querySelector('.box'), tagLine = tag.querySelector('line'), tagDot = tag.querySelector('circle');
+const tagAt = { x: 0, y: 0, bx: 0, by: 0, on: false, key: '' }, tagV = new THREE.Vector3(), tagC = new THREE.Vector3();
+let tagBottom = innerHeight - 14;
+function updateTag(dt) {
+  // at eye level a wall is usually in the way, so the label is kept for the views from above
+  const info = (state.dir === 'a' && state.open) || state.shot === 'inside' || state.shot === 'path' ? null : house.label();
+  let ok = !!info;
+  if (ok) { tagV.copy(info.pos).project(camera); ok = tagV.z < 1 && Math.abs(tagV.x) < 1.02 && Math.abs(tagV.y) < 1.02; }
+  if (!ok) { if (tagAt.on) { tag.classList.remove('on'); tagAt.on = false; } return; }
+  const key = info.code + info.name + info.dims + info.mat;
+  if (key !== tagAt.key) {
+    tagAt.key = key;
+    const [lv, name, dm, nt] = tagBox.children;
+    lv.textContent = info.code; name.textContent = info.name; dm.textContent = info.dims; nt.textContent = info.mat;
+  }
+  const W = innerWidth, H = innerHeight, sx = (tagV.x * 0.5 + 0.5) * W, sy = (-tagV.y * 0.5 + 0.5) * H;
+  const bw = tagBox.offsetWidth, bh = tagBox.offsetHeight, top = W < 760 ? 196 : 104;
+  // beside the part, above it if there is room; never under the bars at the top or the dock at the bottom
+  tagC.set(...CENTER).project(camera);               // the label stands on the side away from the middle of the house
+  let bx = sx >= (tagC.x * 0.5 + 0.5) * W ? sx + 54 : sx - 54 - bw;
+  if (bx + bw > W - 18) bx = sx - 54 - bw;
+  bx = Math.max(18, Math.min(W - 18 - bw, bx));
+  let by = sy - bh - 46; if (by < top) by = sy + 46;
+  by = Math.max(top, Math.min(tagBottom - bh, by));
+  const k = !tagAt.on || prefs().calm ? 1 : Math.min(1, dt * 12);
+  tagAt.x += (sx - tagAt.x) * k; tagAt.y += (sy - tagAt.y) * k; tagAt.bx += (bx - tagAt.bx) * k; tagAt.by += (by - tagAt.by) * k;
+  tagBox.style.transform = `translate(${tagAt.bx.toFixed(1)}px, ${tagAt.by.toFixed(1)}px)`;
+  const lx = tagAt.bx + (tagAt.bx > tagAt.x ? 0 : bw), ly = Math.max(tagAt.by, Math.min(tagAt.by + bh, tagAt.y));
+  tagLine.setAttribute('x1', tagAt.x.toFixed(1)); tagLine.setAttribute('y1', tagAt.y.toFixed(1));
+  tagLine.setAttribute('x2', lx.toFixed(1)); tagLine.setAttribute('y2', (tagAt.by > tagAt.y ? tagAt.by : tagAt.by + bh < tagAt.y ? tagAt.by + bh : ly).toFixed(1));
+  tagDot.setAttribute('cx', tagAt.x.toFixed(1)); tagDot.setAttribute('cy', tagAt.y.toFixed(1));
+  if (!tagAt.on) { tag.classList.add('on'); tagAt.on = true; }
 }
 
 // ------------------------------------------------------------------ B: the sheet printed on the site (cached static base + fast dynamic overlay)
 function ensureSheetBase() {
   if (sheetBaseCanvas) return sheetBaseCanvas;
-  const PX = 100;
+  const PX = SHEET_PX;
   const cw = (SHEET.x1 - SHEET.x0) * PX, chh = (SHEET.z1 - SHEET.z0) * PX;
   const cv = document.createElement('canvas');
   cv.width = cw; cv.height = chh;
   const g = cv.getContext('2d');
   const X = x => (x - SHEET.x0) * PX, Z = z => (z - SHEET.z0) * PX;
-  const INK = '#1d1c19';
-  g.fillStyle = '#f2efe7'; g.fillRect(0, 0, cw, chh);
+  const A = v => `rgba(16,36,26,${v})`;
+  g.fillStyle = '#f1f0e6'; g.fillRect(0, 0, cw, chh);
   let s = 19;
   const r01 = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  for (let i = 0; i < 20000; i++) {
-    g.fillStyle = `rgba(80,70,55,${r01() * 0.04})`;
-    g.fillRect(r01() * cw, r01() * chh, 2, 2);
+  for (let i = 0; i < 16000; i++) {
+    g.fillStyle = `rgba(60,80,55,${r01() * 0.04})`;
+    g.fillRect(8 + r01() * (cw - 16), 8 + r01() * (chh - 16), 2, 2);
   }
-  const line = (pts, w = 2, c = INK, dash = []) => { g.beginPath(); g.setLineDash(dash.map(d => d * PX)); pts.forEach(([x, z], i) => i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))); g.strokeStyle = c; g.lineWidth = w; g.stroke(); g.setLineDash([]); };
+  const line = (pts, w = 2, c = INK, dash = []) => { g.beginPath(); g.setLineDash(dash.map(d => d * PX)); pts.forEach(([x, z], i) => i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))); g.strokeStyle = c; g.lineWidth = w * 2.6; g.stroke(); g.setLineDash([]); };
   const rectL = (x0, z0, x1, z1, w, c, dash) => line([[x0, z0], [x1, z0], [x1, z1], [x0, z1], [x0, z0]], w, c, dash);
   const text = (str, x, z, size, o = {}) => {
-    g.font = `${o.weight || 500} ${size * PX}px ${o.font || "'IBM Plex Mono'"}`;
+    g.font = `${o.weight || 700} ${size * 1.3 * PX}px ${o.font || LABEL_FONT}`;
     g.fillStyle = o.color || INK; g.textAlign = o.align || 'left'; g.textBaseline = o.base || 'alphabetic';
-    if (o.ls) g.letterSpacing = `${o.ls * PX}px`; else g.letterSpacing = '0px';
+    g.letterSpacing = `${(o.ls ?? 0.03) * PX}px`;
     g.fillText(str, X(x), Z(z));
   };
   rectL(SHEET.x0 + 0.8, SHEET.z0 + 0.8, SHEET.x1 - 0.8, SHEET.z1 - 0.8, 6);
   rectL(SHEET.x0 + 1.1, SHEET.z0 + 1.1, SHEET.x1 - 1.1, SHEET.z1 - 1.1, 2);
 
-  const GL = ['A', 'B', 'C', 'D', 'E'];
-  BAYS.forEach((x, i) => {
-    line([[x, -7.0], [x, 5.4]], 2, 'rgba(29,28,25,0.55)', [0.9, 0.18, 0.12, 0.18]);
-    g.beginPath(); g.arc(X(x), Z(-7.55), 0.5 * PX, 0, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = INK; g.stroke();
-    text(GL[i], x, -7.55, 0.52, { align: 'center', base: 'middle', font: "'Chakra Petch'", weight: 700 });
-  });
-  [-HZ, HZ].forEach((z, i) => {
-    line([[-9.6, z], [9.6, z]], 2, 'rgba(29,28,25,0.55)', [0.9, 0.18, 0.12, 0.18]);
-    g.beginPath(); g.arc(X(-10.15), Z(z), 0.5 * PX, 0, Math.PI * 2); g.lineWidth = 3; g.stroke();
-    text(String(i + 1), -10.15, z, 0.52, { align: 'center', base: 'middle', font: "'Chakra Petch'", weight: 700 });
-  });
-  rectL(PIT.x0, PIT.z0, PIT.x1, PIT.z1, 2, 'rgba(29,28,25,0.5)', [0.3, 0.2]);
-  for (const x of BAYS) for (const z of [-HZ, HZ]) rectL(x - 0.55, z - 0.55, x + 0.55, z + 0.55, 2.5, INK, [0.16, 0.1]);
-  rectL(-HX - 0.3, -HZ - 0.3, HX + 0.3, HZ + 0.3, 2.5, INK, [0.16, 0.1]);
-  rectL(-HX + 0.3, -HZ + 0.3, HX - 0.3, HZ - 0.3, 2.5, INK, [0.16, 0.1]);
-  rectL(-HX - 0.2, -HZ - 0.2, HX + 0.2, HZ + 0.2, 7);
+  // the grid: four axes down the slope, three across it
+  const AX = [['A', 3.85], ['B', 7.0], ['C', 15.6], ['D', 18.15]], AZ = [['1', -7.85], ['2', -1.6], ['3', 3.85]];
+  const bubble = (name, x, z) => {
+    g.beginPath(); g.arc(X(x), Z(z), 0.55 * PX, 0, Math.PI * 2); g.fillStyle = '#f1f0e6'; g.fill(); g.lineWidth = 3; g.strokeStyle = INK; g.stroke();
+    text(name, x, z + 0.03, 0.58, { align: 'center', base: 'middle', font: DISPLAY_FONT, weight: 400, ls: 0 });
+  };
+  for (const [name, x] of AX) { line([[x, -12.4], [x, 7.2]], 2, A(0.55), [0.9, 0.18, 0.12, 0.18]); bubble(name, x, -13.0); }
+  for (const [name, z] of AZ) { line([[-0.6, z], [30.4, z]], 2, A(0.55), [0.9, 0.18, 0.12, 0.18]); bubble(name, -1.2, z); }
 
-  const dz = -5.6;
-  line([[-HX - 0.2, dz], [HX + 0.2, dz]], 2);
-  [-HX - 0.2, ...BAYS.slice(1, 4), HX + 0.2].forEach(x => line([[x - 0.18, dz + 0.18], [x + 0.18, dz - 0.18]], 3));
-  [-HX - 0.2, ...BAYS.slice(1, 4), HX + 0.2].forEach(x => line([[x, dz + 0.4], [x, dz - 0.25]], 1.5));
-  ['3200', '3000', '3000', '3200'].forEach((t, i) => text(t, (BAYS[i] + BAYS[i + 1]) / 2 + (i === 0 ? -0.1 : i === 3 ? 0.1 : 0), dz - 0.22, 0.36, { align: 'center' }));
-  line([[-HX - 0.2, dz - 1.2], [HX + 0.2, dz - 1.2]], 2);
-  [-HX - 0.2, HX + 0.2].forEach(x => { line([[x - 0.18, dz - 1.02], [x + 0.18, dz - 1.38]], 3); line([[x, dz - 0.8], [x, dz - 1.45]], 1.5); });
-  text('12 400', 0, dz - 1.42, 0.36, { align: 'center' });
+  // the pit, the strip footings, the slab, the walls, the pool
+  rectL(PIT.x0, PIT.z0, PIT.x1, PIT.z1, 2, A(0.5), [0.3, 0.2]);
+  for (const [x0, z0, x1, z1] of FOOTINGS) rectL(x0, z0, x1, z1, 2.5, INK, [0.16, 0.1]);
+  rectL(4.0, -7.7, 18.3, 3.7, 2.5, INK, [0.16, 0.1]);
+  g.fillStyle = INK;
+  for (const [x0, z0, x1, z1, lv] of planWalls) if (lv < -3) g.fillRect(X(x0), Z(z0), (x1 - x0) * PX, (z1 - z0) * PX);
+  rectL(18.3, POOL.z0, 21.9, POOL.z1, 2.5, A(0.7));
+  rectL(POOL.x0, POOL.z0, POOL.x1, POOL.z1, 5);
+  rectL(POOL.x0, POOL.z0 + 0.4, POOL.x1 - 0.3, POOL.z1 - 0.4, 2, A(0.6));
+  for (let z = POOL.z0 + 1.2; z < POOL.z1 - 0.6; z += 1.0) line([[POOL.x0 + 0.5, z], [POOL.x0 + 2.2 + 1.5 * Math.sin(z), z]], 1.5, A(0.3));
 
-  text('BODENPLATTE 300 STB AUF 100 EPS, OK PLATTE +0.150', -HX + 0.6, -HZ + 1.1, 0.3);
-  text('EINZELFUNDAMENT F1 1100 × 1100 × 350 UNTER JEDEM PFOSTEN', -HX + 0.6, -HZ + 1.6, 0.3);
-  text('RINGBALKEN 600 × 450 UMLAUFEND', -HX + 0.6, -HZ + 2.1, 0.3);
-  text('FUNDAMENTPLAN', 7.6, -1.0, 0.62, { font: "'Chakra Petch'", weight: 700 });
-  text('MASSSTAB 1:1. DIESE ZEICHNUNG IST DIE BAUSTELLE.', 7.6, -0.25, 0.3);
+  // dimension chains along the north side
+  const dim = (z, xs, labels) => {
+    line([[xs[0], z], [xs[xs.length - 1], z]], 2);
+    for (const x of xs) { line([[x - 0.18, z + 0.18], [x + 0.18, z - 0.18]], 3); line([[x, z + 0.4], [x, z - 0.25]], 1.5); }
+    labels.forEach((t, i) => text(t, (xs[i] + xs[i + 1]) / 2, z - 0.22, 0.38, { align: 'center' }));
+  };
+  dim(-10.2, [3.7, 7.0, 15.6, 18.3], ['3 300', '8 600', '2 700']);
+  dim(-11.3, [3.7, 18.3], ['14 600']);
 
-  g.beginPath(); g.arc(X(19.6), Z(-7.6), 1.0 * PX, 0, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = INK; g.stroke();
-  g.beginPath(); g.moveTo(X(19.6), Z(-8.75)); g.lineTo(X(19.95), Z(-7.3)); g.lineTo(X(19.6), Z(-7.55)); g.lineTo(X(19.25), Z(-7.3)); g.closePath(); g.fillStyle = INK; g.fill();
-  text('N', 19.6, -9.0, 0.45, { align: 'center', font: "'Chakra Petch'", weight: 700 });
+  text('BODENPLATTE 400 STB, OK −3.200', 5.0, -5.9, 0.34);
+  text('STREIFENFUNDAMENT 1000 × 700 UMLAUFEND', 5.0, -5.25, 0.34);
+  text('WANDELEMENTE 300 STB GEGEN DEN HANG', 5.0, -4.6, 0.34);
+  text('HOF ±0.000', -8.0, -1.2, 0.34, { color: A(0.75) });
+  text('POOL OK −3.340', 23.2, 5.2, 0.34, { color: A(0.75) });
+  text('FUNDAMENTPLAN', 22.4, -12.2, 1.0, { font: DISPLAY_FONT, weight: 400, ls: 0.02 });
+  text('MASSSTAB 1:1. DIESE ZEICHNUNG IST DIE BAUSTELLE.', 22.4, -11.3, 0.34);
 
-  const P = { x0: -14.5, x1: 13.0, z0: 7.0, z1: 15.6 };
-  const lab = 5.0;
-  const wx = w => P.x0 + lab + (P.x1 - P.x0 - lab) * w / WEEKS;
-  const rowH = (P.z1 - P.z0 - 1.2) / PHASES.length;
-  text('BAUZEITENPLAN · 14 WOCHEN · START MO 1. MÄR 2027', P.x0, P.z0 - 0.45, 0.42, { weight: 600 });
+  // north points up the sheet
+  g.beginPath(); g.arc(X(35.6), Z(-3.4), 1.1 * PX, 0, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = INK; g.stroke();
+  g.beginPath(); g.moveTo(X(35.6), Z(-4.65)); g.lineTo(X(35.98), Z(-3.05)); g.lineTo(X(35.6), Z(-3.35)); g.lineTo(X(35.22), Z(-3.05)); g.closePath(); g.fillStyle = INK; g.fill();
+  text('N', 35.6, -4.95, 0.55, { align: 'center', font: DISPLAY_FONT, weight: 400, ls: 0 });
+
+  // the programme, printed below the house
+  const P = GANTT_BOX, wx = w => P.x0 + GANTT_LAB + (P.x1 - P.x0 - GANTT_LAB) * w / WEEKS;
+  const rowH = (P.z1 - P.z0 - 1.3) / PHASES.length;
+  text(`BAUZEITENPLAN · ${WEEKS} WOCHEN · START MO 1. MÄR 2027`, P.x0, P.z0 - 0.5, 0.46, { weight: 700 });
   for (let k = 0; k <= WEEKS; k++) {
-    line([[wx(k), P.z0 + 0.3], [wx(k), P.z1]], k % 4 === 0 ? 2.5 : 1.5, 'rgba(29,28,25,0.35)');
-    if (k < WEEKS) text(pad2(k + 1), wx(k + 0.5), P.z0 + 0.82, 0.34, { align: 'center' });
+    line([[wx(k), P.z0 + 0.35], [wx(k), P.z1]], k % 4 === 0 ? 2.5 : 1.2, A(k % 4 === 0 ? 0.38 : 0.2));
+    if (k < WEEKS && k % 2 === 1) text(pad2(k + 1), wx(k + 0.5), P.z0 + 0.9, 0.34, { align: 'center', ls: 0 });
   }
   PHASES.forEach((p, i) => {
-    const z = P.z0 + 1.2 + i * rowH, bh = rowH * 0.5, bz = z + (rowH - bh) / 2;
-    line([[P.x0, z + rowH], [P.x1, z + rowH]], 1.5, 'rgba(29,28,25,0.25)');
+    const z = P.z0 + 1.3 + i * rowH, bh = rowH * 0.5, bz = z + (rowH - bh) / 2;
+    line([[P.x0, z + rowH], [P.x1, z + rowH]], 1.5, A(0.25));
     g.strokeStyle = INK; g.lineWidth = 2.5;
     g.strokeRect(X(wx(p.w0)), Z(bz), (wx(p.w1) - wx(p.w0)) * PX, bh * PX);
     g.save(); g.beginPath(); g.rect(X(wx(p.w0)), Z(bz), (wx(p.w1) - wx(p.w0)) * PX, bh * PX); g.clip();
-    g.strokeStyle = 'rgba(29,28,25,0.3)'; g.lineWidth = 2;
-    for (let h = X(wx(p.w0)) - bh * PX; h < X(wx(p.w1)); h += 14) { g.beginPath(); g.moveTo(h, Z(bz + bh)); g.lineTo(h + bh * PX, Z(bz)); g.stroke(); }
+    g.strokeStyle = A(0.3); g.lineWidth = 2;
+    for (let h = X(wx(p.w0)) - bh * PX; h < X(wx(p.w1)); h += 12) { g.beginPath(); g.moveTo(h, Z(bz + bh)); g.lineTo(h + bh * PX, Z(bz)); g.stroke(); }
     g.restore();
   });
-  rectL(P.x0 - 0.4, P.z0 - 1.3, P.x1 + 0.4, P.z1 + 0.3, 3);
+  rectL(P.x0 - 0.45, P.z0 - 1.45, P.x1 + 0.45, P.z1 + 0.35, 3);
 
-  const tb = { x0: 15.2, x1: 23.2, z0: 10.2, z1: 17.2 };
+  // the title block
+  const tb = { x0: 26.2, x1: 38.4, z0: 12.6, z1: 22.4 };
   rectL(tb.x0, tb.z0, tb.x1, tb.z1, 4);
-  line([[tb.x0, tb.z0 + 2.0], [tb.x1, tb.z0 + 2.0]], 2);
-  line([[tb.x0, tb.z0 + 4.4], [tb.x1, tb.z0 + 4.4]], 2);
-  text('PURLIN', tb.x0 + 0.4, tb.z0 + 1.35, 0.9, { font: "'Chakra Petch'", weight: 700, ls: 0.12 });
-  text('HAUS AM FENWICK LANE', tb.x0 + 0.4, tb.z0 + 2.75, 0.34, { weight: 600 });
-  text('FUNDAMENTPLAN UND BAUZEITENPLAN', tb.x0 + 0.4, tb.z0 + 3.35, 0.3);
-  text('HOLZRAHMEN · 142 M² · 3 ZIMMER', tb.x0 + 0.4, tb.z0 + 3.9, 0.3);
-  text('PLAN 08-101   REV C   M 1:1', tb.x0 + 0.4, tb.z0 + 5.2, 0.3);
-  text('SCHLÜSSEL FR 4. JUN 2027', tb.x0 + 0.4, tb.z0 + 5.8, 0.3, { color: '#e85d04', weight: 600 });
+  line([[tb.x0, tb.z0 + 2.5], [tb.x1, tb.z0 + 2.5]], 2);
+  line([[tb.x0, tb.z0 + 5.6], [tb.x1, tb.z0 + 5.6]], 2);
+  line([[tb.x0, tb.z0 + 7.9], [tb.x1, tb.z0 + 7.9]], 2);
+  text('PROJEKT', tb.x0 + 0.5, tb.z0 + 1.15, 0.82, { font: DISPLAY_FONT, weight: 400, ls: 0.03 });
+  text('STEININGER', tb.x0 + 0.5, tb.z0 + 2.1, 0.82, { font: DISPLAY_FONT, weight: 400, ls: 0.03 });
+  text('HAUS AM HANG', tb.x0 + 0.5, tb.z0 + 3.4, 0.4, { weight: 700 });
+  text('FUNDAMENTPLAN UND BAUZEITENPLAN', tb.x0 + 0.5, tb.z0 + 4.1, 0.34);
+  text('STAHLBETON, TRAVERTIN · BGF 480 M²', tb.x0 + 0.5, tb.z0 + 4.8, 0.34);
+  text('BLATT A-905   REV C   M 1:1', tb.x0 + 0.5, tb.z0 + 6.5, 0.34);
+  text('SCHLÜSSEL FR 19. NOV 2027', tb.x0 + 0.5, tb.z0 + 7.2, 0.34, { color: '#3d7607', weight: 700 });
+  text('KONZEPT, UX, THREE.JS', tb.x0 + 0.5, tb.z0 + 8.65, 0.3, { color: A(0.75) });
+  text('MICHA SCHWAN · UX DESIGNER', tb.x0 + 0.5, tb.z0 + 9.3, 0.34, { weight: 700 });
 
   sheetBaseCanvas = cv;
   return cv;
@@ -729,7 +717,7 @@ function ensureSheetBase() {
 
 function drawSheet(T) {
   const base = ensureSheetBase();
-  const PX = 100;
+  const PX = SHEET_PX;
   if (!sheetWorkCanvas) {
     sheetWorkCanvas = document.createElement('canvas');
     sheetWorkCanvas.width = base.width;
@@ -739,32 +727,32 @@ function drawSheet(T) {
   g.drawImage(base, 0, 0);
 
   const X = x => (x - SHEET.x0) * PX, Z = z => (z - SHEET.z0) * PX;
-  const INK = '#1d1c19', ACC = '#e85d04';
-  const P = { x0: -14.5, x1: 13.0, z0: 7.0, z1: 15.6 };
-  const lab = 5.0;
-  const wx = w => P.x0 + lab + (P.x1 - P.x0 - lab) * w / WEEKS;
-  const rowH = (P.z1 - P.z0 - 1.2) / PHASES.length;
+  const P = GANTT_BOX, wx = w => P.x0 + GANTT_LAB + (P.x1 - P.x0 - GANTT_LAB) * w / WEEKS;
+  const rowH = (P.z1 - P.z0 - 1.3) / PHASES.length;
 
   PHASES.forEach((p, i) => {
-    const z = P.z0 + 1.2 + i * rowH, bh = rowH * 0.5, bz = z + (rowH - bh) / 2;
+    const z = P.z0 + 1.3 + i * rowH, bh = rowH * 0.5, bz = z + (rowH - bh) / 2;
     const live = T >= p.w0 && T < p.w1;
-    g.font = `${live ? 600 : 500} ${0.32 * PX}px 'IBM Plex Mono'`;
-    g.fillStyle = live ? ACC : INK;
+    g.font = `700 ${0.36 * PX}px ${LABEL_FONT}`;
+    g.letterSpacing = `${0.03 * PX}px`;
+    g.fillStyle = live ? '#3d7607' : INK;
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-    g.fillText(`${pad2(p.n)}  ${p.name.toUpperCase()}`, X(P.x0), Z(z + rowH * 0.66));
+    g.fillText(`${pad2(p.n + 1)}  ${p.name.toUpperCase()}`, X(P.x0), Z(z + rowH * 0.66));
     const pe = Math.min(T, p.w1);
     if (pe > p.w0) {
-      g.fillStyle = live ? ACC : INK;
+      g.fillStyle = live ? LEAF : INK;
       g.fillRect(X(wx(p.w0)), Z(bz), (wx(pe) - wx(p.w0)) * PX, bh * PX);
     }
   });
   g.beginPath();
   g.moveTo(X(wx(T)), Z(P.z0 + 0.2));
-  g.lineTo(X(wx(T)), Z(P.z1 + 0.3));
-  g.strokeStyle = ACC; g.lineWidth = 6; g.stroke();
-  g.font = `600 ${0.3 * PX}px 'IBM Plex Mono'`;
-  g.fillStyle = ACC;
-  g.fillText(`HEUTE ${fmtDay(dateAt(T)).toUpperCase()}`, X(wx(T) + 0.25), Z(P.z1 + 0.05));
+  g.lineTo(X(wx(T)), Z(P.z1 + 0.35));
+  g.strokeStyle = LEAF; g.lineWidth = 6; g.stroke();
+  g.font = `700 ${0.34 * PX}px ${LABEL_FONT}`;
+  g.fillStyle = '#3d7607';
+  const lab = `HEUTE ${fmtDay(dateAt(T)).toUpperCase()}`;
+  g.textAlign = T > WEEKS * 0.8 ? 'right' : 'left';
+  g.fillText(lab, X(wx(T) + (T > WEEKS * 0.8 ? -0.3 : 0.3)), Z(P.z1 + 0.95));
 
   if (!sheetTex) {
     sheetTex = new THREE.CanvasTexture(sheetWorkCanvas);
@@ -776,16 +764,21 @@ function drawSheet(T) {
   return sheetTex;
 }
 
-// ------------------------------------------------------------------ Interactivity: Scroll, Gantt Scrub, Room Tour, Play, Controls
+// ------------------------------------------------------------------ Interactivity: scroll, Gantt scrub, the walk, play, keys
+const WHEEL = 0.0045 * WEEKS / 14;         // weeks a pixel of wheel travel is worth
+const TOUR_STEP = 0.036;                   // the walk takes the last weeks slowly
 let lastSheetUpdateWk = state.wk;
 let isDraggingGantt = false;
+
+function setPlaying(on) {
+  state.playing = !!on;
+  if (SEQ.setPlaying) SEQ.setPlaying(state.playing);
+}
 
 function setTargetWeek(w, immediate = false) {
   state.userMoved = true;
   state.roomPinned = false;
-  if (state.dir === 'a' && state.open && w > 0.05) {
-    state.open = false;
-  }
+  if (state.dir === 'a' && state.open && w > 0.05) state.open = false;
   state.targetWk = Math.min(WEEKS, Math.max(0, w));
   if (immediate) state.wk = state.targetWk;
 }
@@ -809,9 +802,21 @@ function scrubFromSvgEvent(e, svg) {
   syncVisuals(1);
 }
 
-function bindHudEvents() {
-  // Direction buttons
-  hud.querySelectorAll('[data-dir]').forEach(btn => {
+function goToRoom(stop) {
+  setPlaying(false);
+  state.userMoved = true;
+  state.roomPinned = true;
+  state.camMode = 'inside';
+  state.shot = 'inside';
+  if (state.dir === 'a') state.open = false;
+  if (state.wk < WEEKS - 0.01) { state.wk = WEEKS; state.targetWk = WEEKS; }
+  state.targetTour = stop.u;
+  if (prefs().calm) state.tour = stop.u;
+  syncVisuals(prefs().calm ? 1 : 0.2);
+}
+
+function bindBarEvents() {
+  hudBar.querySelectorAll('[data-dir]').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
       const d = btn.dataset.dir;
@@ -821,23 +826,20 @@ function bindHudEvents() {
       u.searchParams.set('wk', state.wk.toFixed(2));
       u.searchParams.delete('open');
       u.searchParams.delete('shot');
+      u.searchParams.delete('room');
       location.href = u.toString();
     };
   });
 
-  // Camera buttons
-  hud.querySelectorAll('[data-cam]').forEach(btn => {
+  hudBar.querySelectorAll('[data-cam]').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
       state.camMode = btn.dataset.cam;
+      state.userMoved = true;
       if (state.camMode === 'inside') {
-        state.userMoved = true;
-        if (state.wk < 13.45) {
-          state.wk = 14.0;
-          state.targetWk = 14.0;
-        }
+        if (state.wk < TOUR_W0) { state.wk = WEEKS; state.targetWk = WEEKS; }
         state.roomPinned = true;
-        if (state.tour < 0.05) { state.tour = 0.25; state.targetTour = 0.25; }
+        if (state.tour < 0.05) { state.tour = 0.26; state.targetTour = 0.26; }
       } else {
         state.roomPinned = false;
       }
@@ -846,91 +848,70 @@ function bindHudEvents() {
     };
   });
 
-  // Interior room walkthrough tabs (01 ENTRY .. 05 OVERLOOK)
-  hud.querySelectorAll('[data-room]').forEach(btn => {
+  const slider = hudBar.querySelector('.cad-scrub input[type="range"]');
+  slider.oninput = (e) => {
+    setPlaying(false);
+    setTargetWeek(parseFloat(e.target.value), true);
+    syncVisuals(1);
+  };
+}
+
+function bindHudEvents() {
+  hudBody.querySelectorAll('[data-room]').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
       const stop = INTERIOR_STOPS.find(s => s.id === btn.dataset.room);
-      if (!stop) return;
-      state.playing = false;
-      state.userMoved = true;
-      state.roomPinned = true;
-      state.camMode = 'inside';
-      state.shot = 'inside';
-      if (state.wk < 13.5) {
-        state.wk = 14.0;
-        state.targetWk = 14.0;
-      }
-      state.targetTour = stop.u;
-      renderHud();
+      if (stop) goToRoom(stop);
     };
   });
 
-  // Play / Pause button
-  const playBtn = hud.querySelector('[data-action="play"]');
-  if (playBtn) {
-    playBtn.onclick = (e) => {
-      e.stopPropagation();
-      state.playing = !state.playing;
-      state.userMoved = true;
-      state.roomPinned = false;
-      if (state.playing) {
-        if (state.dir === 'a' && state.open) state.open = false;
-        if (state.wk >= WEEKS - 0.02) { state.wk = 0; state.targetWk = 0; state.tour = 0; state.targetTour = 0; }
-      }
-      renderHud();
-    };
-  }
-
-  // Range slider
-  const slider = hud.querySelector('.cad-scrub input[type="range"]');
-  if (slider) {
-    slider.oninput = (e) => {
-      state.playing = false;
-      setTargetWeek(parseFloat(e.target.value), true);
-      syncVisuals(1);
-    };
-  }
-
-  // SVG Gantt chart click & drag scrubbing
-  const svg = hud.querySelector('.gantt-svg');
+  const svg = hudBody.querySelector('.gantt-svg');
   if (svg) {
     svg.onpointerdown = (e) => {
       isDraggingGantt = true;
-      state.playing = false;
-      svg.setPointerCapture(e.pointerId);
+      setPlaying(false);
       scrubFromSvgEvent(e, svg);
-    };
-    svg.onpointermove = (e) => {
-      if (!isDraggingGantt) return;
-      scrubFromSvgEvent(e, svg);
-    };
-    svg.onpointerup = svg.onpointercancel = () => {
-      isDraggingGantt = false;
     };
   }
 }
+// the chart is redrawn while it is dragged, so the drag is followed on the window
+addEventListener('pointermove', (e) => {
+  if (!isDraggingGantt) return;
+  const svg = hudBody.querySelector('.gantt-svg');
+  if (svg) scrubFromSvgEvent(e, svg);
+});
+addEventListener('pointerup', () => { isDraggingGantt = false; });
+addEventListener('pointercancel', () => { isDraggingGantt = false; });
+
+function stepWeeks(delta) {
+  // in the walk, a step moves along the rooms; before it, through the weeks
+  if (state.camMode === 'inside') {
+    state.userMoved = true;
+    state.roomPinned = true;
+    state.targetTour = clamp01(state.targetTour + (delta / WHEEL) * 0.00054);
+    if (prefs().calm) { state.tour = state.targetTour; syncVisuals(1); }
+    return;
+  }
+  // the last weeks are the walk through the house, wherever the camera follows the weeks inside (A and C)
+  const walks = state.camMode === 'auto' && state.dir !== 'b';
+  const slow = walks && state.targetWk >= TOUR_W0 - 0.02 && (delta > 0 || state.targetWk > TOUR_W0 + 0.02);
+  let w = state.targetWk + delta * (slow ? TOUR_STEP : 1);
+  if (walks && !slow && delta > 0) w = Math.min(w, TOUR_W0);   // no step jumps over the walk: it stops at the door first
+  setTargetWeek(w, false);
+}
 
 window.addEventListener('wheel', (e) => {
+  if (e.target.closest && e.target.closest('.panel')) return;
   e.preventDefault();
-  state.playing = false;
-  const rawDelta = (Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * 0.0045;
-  if (state.dir === 'a' && state.open && rawDelta > 0) {
+  setPlaying(false);
+  const px = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+  if (state.dir === 'a' && state.open && px > 0) {
     state.open = false;
     state.userMoved = true;
     renderHud();
     return;
   }
-  // If user is explicitly in INSIDE mode at Week 14, let wheel scroll smoothly along the 5-room spline
-  if (state.camMode === 'inside') {
-    state.userMoved = true;
-    state.roomPinned = true;
-    state.targetTour = clamp01(state.targetTour + rawDelta * 0.35);
-    return;
-  }
-  // Slow down scroll step during the final handover walkthrough (wk >= 13.35) so all 5 rooms glide smoothly
-  const stepScale = state.targetWk >= 13.35 ? 0.22 : 1.0;
-  setTargetWeek(state.targetWk + rawDelta * stepScale, false);
+  stepWeeks(px * WHEEL);
 }, { passive: false });
 
 let touchY = null;
@@ -941,9 +922,9 @@ window.addEventListener('touchmove', (e) => {
   if (touchY == null || e.touches.length !== 1) return;
   const dy = touchY - e.touches[0].clientY;
   touchY = e.touches[0].clientY;
-  state.playing = false;
-  const stepScale = state.targetWk >= 13.35 ? 0.22 : 1.0;
-  setTargetWeek(state.targetWk + dy * 0.018 * stepScale, false);
+  setPlaying(false);
+  if (state.dir === 'a' && state.open && dy > 0) { state.open = false; state.userMoved = true; renderHud(); }
+  stepWeeks(dy * WHEEL * 4);
 }, { passive: true });
 
 window.addEventListener('resize', () => {
@@ -954,7 +935,7 @@ window.addEventListener('resize', () => {
 
 function syncVisuals(camLerp = 0.2) {
   updateSceneForWeek(state.wk, camLerp);
-  if (state.dir === 'b' && Math.abs(state.wk - lastSheetUpdateWk) > 0.03) {
+  if (state.dir === 'b' && Math.abs(state.wk - lastSheetUpdateWk) > 0.08) {
     lastSheetUpdateWk = state.wk;
     drawSheet(state.wk);
   }
@@ -962,43 +943,74 @@ function syncVisuals(camLerp = 0.2) {
   window.__state = { DIR: state.dir, WK: state.wk, SHOT: state.shot, TOUR: state.tour, house };
 }
 
+// ------------------------------------------------------------------ the page controls: play, view options, chapters, keys (access.js)
+SEQ.onPlay = () => {
+  const on = !state.playing;
+  state.userMoved = true;
+  state.roomPinned = false;
+  if (on) {
+    if (state.dir === 'a' && state.open) state.open = false;
+    if (state.camMode === 'inside') state.camMode = 'auto';
+    if (state.wk >= WEEKS - 0.02) { state.wk = 0; state.targetWk = 0; state.tour = 0; state.targetTour = 0; }
+  }
+  setPlaying(on);
+  syncVisuals(0.2);
+};
+SEQ.onStep = (dir, big) => { setPlaying(false); if (state.dir === 'a' && state.open && dir > 0) state.open = false; stepWeeks(dir * (big ? 2 : 0.5)); };
+SEQ.onEdge = (end) => { setPlaying(false); state.camMode = 'auto'; setTargetWeek(end ? TOUR_W0 - 0.05 : 0, true); syncVisuals(1); };
+SEQ.onJump = (c) => {
+  setPlaying(false);
+  state.camMode = 'auto';
+  state.roomPinned = false;
+  state.userMoved = true;
+  state.targetWk = state.wk = Math.min(WEEKS, Math.max(0, c.wk));
+  state.open = state.dir === 'a' && !!c.open;
+  if (c.wk < TOUR_W0) { state.tour = 0; state.targetTour = 0; }
+  syncVisuals(1);
+};
+SEQ.onPrefs = () => { applyCamera(state.shot, 1); syncVisuals(1); };
+
 // ------------------------------------------------------------------ go
+try { await Promise.all([document.fonts.load(`700 12px Arimo`), document.fonts.load(`12px 'BBH Bogle'`)]); } catch (e) { /* the fallback faces will do */ }
 await document.fonts.ready;
+house.drawSign();   // the site board is lettered in the faces of the page
 if (DIR === 'b') {
   sheetBaseCanvas = null;
-  groundMat.map = drawSheet(state.wk);
-  groundMat.needsUpdate = true;
-  cap.material = groundMat;
+  drawSheet(state.wk);
 }
 renderHud();
+document.body.classList.add('ready');
 
 let frames = 0;
 let lastTime = performance.now();
 function loop(now = performance.now()) {
   const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
   lastTime = now;
+  const calm = !!prefs().calm;
 
   const tourDiff = Math.abs(state.targetTour - state.tour);
-  if (tourDiff > 0.001) {
-    state.tour += (state.targetTour - state.tour) * Math.min(1, dt * 6.5);
-    if (Math.abs(state.targetTour - state.tour) <= 0.001) state.tour = state.targetTour;
+  if (tourDiff > 0.0004) {
+    state.tour += (state.targetTour - state.tour) * (calm ? 1 : Math.min(1, dt * 3.2));
+    if (Math.abs(state.targetTour - state.tour) <= 0.0004) state.tour = state.targetTour;
   }
 
   if (state.playing) {
-    // Slow down playback during the handover interior walkthrough (13.38..14.0) so the camera glides through all 5 rooms
-    const rate = state.wk >= 13.38 ? 0.095 : 1.15;
+    // the build runs in under a minute, the walk through the house takes its time
+    const rate = state.wk >= TOUR_W0 && state.dir !== 'b' ? 0.03 : 0.75;   // B has no walk inside, so its last weeks run at the pace of the build
     state.targetWk = Math.min(WEEKS, state.targetWk + dt * rate);
     state.wk = state.targetWk;
-    if (state.wk >= WEEKS) state.playing = false;
+    if (state.wk >= WEEKS) setPlaying(false);
     syncVisuals(0.18);
-  } else if (Math.abs(state.targetWk - state.wk) > 0.0015 || tourDiff > 0.001) {
-    state.wk += (state.targetWk - state.wk) * Math.min(1, dt * 9);
+  } else if (Math.abs(state.targetWk - state.wk) > 0.0015 || tourDiff > 0.0004) {
+    state.wk += (state.targetWk - state.wk) * (calm ? 1 : Math.min(1, dt * 9));
     if (Math.abs(state.targetWk - state.wk) <= 0.0015) state.wk = state.targetWk;
     syncVisuals(0.18);
   } else if (frames >= 4 && curCamPos.distanceToSquared(new THREE.Vector3(...getTargetCameraPose(state.shot).pos)) > 0.005) {
     applyCamera(state.shot, 0.15);
   }
 
+  house.tick(dt, calm);
+  updateTag(dt);
   renderer.render(scene, camera);
   if (++frames === 4) window.__ready = true;
   requestAnimationFrame(loop);
