@@ -996,7 +996,7 @@ function loop(now = performance.now()) {
 
   if (state.playing) {
     // the build runs in under a minute, the walk through the house takes its time
-    const rate = state.wk >= TOUR_W0 ? 0.03 : 0.75;
+    const rate = state.wk >= TOUR_W0 && state.dir !== 'b' ? 0.03 : 0.75;   // B has no walk inside, so its last weeks run at the pace of the build
     state.targetWk = Math.min(WEEKS, state.targetWk + dt * rate);
     state.wk = state.targetWk;
     if (state.wk >= WEEKS) setPlaying(false);
