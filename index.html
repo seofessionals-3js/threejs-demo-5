@@ -3,10 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>three.js Demo 5</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Projekt Steininger // Blatt A-905</title>
+<meta name="description" content="Projekt Steininger: Ihr Haus in 38 Wochen. Scrollen Sie durch den Bauzeitenplan, und das Travertinhaus am Hang baut sich Balken für Balken selbst, samt Kran. Ein begehbarer Bauzeitenplan in three.js.">
+<meta name="author" content="Micha Schwan">
+<meta name="theme-color" content="#f1f0e6">
+<link rel="preload" href="fonts/BBHBogle-Regular.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="fonts/Arimo-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="sketch.css">
 <script type="importmap">
 {
@@ -19,7 +21,45 @@
 </head>
 <body>
 <div id="stage"></div>
-<div id="hud"></div>
+<div id="cad-hud" aria-hidden="true"><div class="ch-c tl"></div><div class="ch-c tr"></div><div class="ch-c bl"></div><div class="ch-c br"></div></div>
+<main id="hud"></main>
+<header class="bar">
+  <nav class="tools" aria-label="Seitensteuerung">
+    <button type="button" class="tool" id="playBtn" aria-pressed="false" title="Bau abspielen: die Wochen laufen für Sie (P)">
+      <svg class="i-play" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z"/></svg><svg class="i-pause" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg><span>Abspielen</span>
+    </button>
+    <button type="button" class="tool" id="viewBtn" aria-expanded="false" aria-controls="viewPanel" title="Ansichtsoptionen und Kapitel">
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M0 2h7v1.6H0zM9 2h3v1.6H9zM7 .8h1.6v4H7zM0 8.4h3V10H0zM5 8.4h7V10H5zM3.4 7.2H5v4H3.4z"/></svg><span>Ansicht</span>
+    </button>
+    <a class="cta" href="mailto:schwanmicha07@gmail.com?subject=Projekt%20Steininger%20%2F%2F%20Bauzeitenplan">Kontakt</a>
+  </nav>
+</header>
+<div class="panel" id="viewPanel" role="group" aria-label="Ansichtsoptionen" hidden>
+  <h2>Ansicht</h2>
+  <label><input type="checkbox" id="optCalm"><span>Bewegung reduzieren<small>Kein Pendeln am Haken, kein Nachlauf, die Kamera springt statt zu fahren</small></span></label>
+  <label><input type="checkbox" id="optLarge"><span>Größere Beschriftung</span></label>
+  <label><input type="checkbox" id="optContrast"><span>Höherer Kontrast</span></label>
+  <h2>Springen zu</h2>
+  <ol id="chapters"></ol>
+  <p class="keys"><kbd>P</kbd> Abspielen, Pause &nbsp; <kbd>1</kbd>&ndash;<kbd>0</kbd> Springen<br><kbd>&larr;</kbd> <kbd>&rarr;</kbd> Wochen &nbsp; <kbd>Esc</kbd> Schließen</p>
+  <p class="by">Konzept, UX &amp; three.js-Umsetzung<br><b>Micha Schwan</b> · UX Designer<br><a href="mailto:schwanmicha07@gmail.com">schwanmicha07@gmail.com</a></p>
+</div>
+<p class="sr" id="live" aria-live="polite"></p>
+<section class="sr" aria-labelledby="sumTitle">
+  <h2 id="sumTitle">Was diese Seite zeigt</h2>
+  <p>Ein 3D-Modell von Projekt Steininger, das sich nach seinem Bauzeitenplan aufbaut: ein dreigeschossiges Travertinhaus am Hang über einem See, gebaut in 38 Wochen. Mit dem Mausrad, den Pfeiltasten oder dem Regler bewegen Sie die Heute-Linie durch den Plan, und das Haus baut sich mit. Die Schaltfläche Abspielen lässt den Bau ablaufen, unter Ansicht finden Sie Optionen für reduzierte Bewegung, größere Beschriftung, höheren Kontrast und Sprünge zu jedem Kapitel.</p>
+  <ol>
+    <li>Woche 1 bis 3: Bauzaun und Baucontainer, dann wird der Hang ausgehoben.</li>
+    <li>Woche 4 bis 6: Streifenfundamente und die Bodenplatte des Poolgeschosses. Der Turmdrehkran wird aufgestellt.</li>
+    <li>Woche 7 bis 9: Der Kran setzt die Wände des Poolgeschosses und die Decke des Wohngeschosses mit dem Balkon. Die Baugrube wird verfüllt.</li>
+    <li>Woche 10 bis 17: Wände, Treppen und Decken von Wohngeschoss und Obergeschoss, das 4,80 Meter über den Balkon auskragt.</li>
+    <li>Woche 17 bis 21: Beide Flachdächer.</li>
+    <li>Woche 21 bis 25: Verglasung, Schiebetüren und Glasbrüstungen. Danach wird der Kran abgebaut.</li>
+    <li>Woche 23 bis 33: Travertinfassade, Putz, Eichendielen und die Einbauten aus Nussbaum.</li>
+    <li>Woche 32 bis 38: Poolterrasse, Pool, Bepflanzung und Möbel. Dann öffnet sich die Tür zum Hof, und ein Rundgang führt durch das Wohngeschoss, die Treppe hinab ins Poolgeschoss und hinaus an den Pool.</li>
+  </ol>
+</section>
+<script src="access.js"></script>
 <script type="module" src="view.js"></script>
 </body>
 </html>
