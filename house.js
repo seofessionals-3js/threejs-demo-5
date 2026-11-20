@@ -4,6 +4,7 @@
 // Same table, so the chart is the build.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildSite } from './site.js';
 
 export const START = new Date(2027, 2, 1);   // Monday 1 March 2027
 export const WEEKS = 38;                     // handover Friday 19 November 2027
@@ -24,8 +25,8 @@ export const TOUR_W0 = 37.2;                 // the week the walk through the fi
 
 export const C = {
   paper: 0xf1f0e6, ink: 0x10241a, accent: 0x5fa512, lime: 0xc4f03e,
-  earth: 0x9B8468, earthDark: 0x7E6850, concrete: 0xB3AFA6, gravel: 0xC9C2B3,
-  clad: 0xE8DFCE, travertine: 0xE2D8C4, pave: 0xDAD0BC, plaster: 0xF4F1EA,
+  earth: 0x9B8468, earthDark: 0x7E6850, concrete: 0xA29E96, gravel: 0xC9C2B3,
+  clad: 0xE1D2B4, travertine: 0xE2D8C4, pave: 0xD5C8AC, plaster: 0xF4F1EA,
   oak: 0xC9A679, soffit: 0xCFA676, teak: 0xB98F66, walnut: 0x694631,
   frame: 0x262523, glass: 0xC6DCE0, water: 0x6FB3B4, steel: 0x565B60,
   fabric: 0xE2DDD2, linen: 0xCFC6B4, leather: 0x8A5232, brass: 0xCFA862, terracotta: 0xB85D3B,
@@ -96,18 +97,24 @@ export function groundAt(x, z, T) {
 // uMud tints the fenced site (the site camera uses it), uContour fades the contour lines.
 export function groundMaterial({ color = C.paper, map = null, contour = 0.2, mud = 0 } = {}) {
   const m = new THREE.MeshStandardMaterial({ color, map, roughness: 0.96, envMapIntensity: 0.2 });
-  const U = m.userData.u = { uMud: { value: mud }, uMudCol: { value: new THREE.Color(C.mud) }, uEarth: { value: new THREE.Color(0xB9A283) }, uInk: { value: new THREE.Vector3(16 / 255, 36 / 255, 26 / 255) }, uContour: { value: contour } };
+  const U = m.userData.u = { uMud: { value: mud }, uMudCol: { value: new THREE.Color(C.mud) }, uEarth: { value: new THREE.Color(0xB9A283) }, uInk: { value: new THREE.Vector3(16 / 255, 36 / 255, 26 / 255) }, uContour: { value: contour },
+    uLawn: { value: 0 }, uLawnA: { value: new THREE.Color(0xA4B182) }, uLawnB: { value: new THREE.Color(0x96A575) } };
   m.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, U);
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aSite;\nattribute float aNat;\nvarying float vSite;\nvarying float vCut;\nvarying vec3 vWPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSite = aSite;\nvCut = aNat - position.y;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vSite;\nvarying float vCut;\nvarying vec3 vWPos;\nuniform float uMud;\nuniform vec3 uMudCol;\nuniform vec3 uEarth;\nuniform vec3 uInk;\nuniform float uContour;')
+      .replace('#include <common>', '#include <common>\nvarying float vSite;\nvarying float vCut;\nvarying vec3 vWPos;\nuniform float uMud;\nuniform vec3 uMudCol;\nuniform vec3 uEarth;\nuniform vec3 uInk;\nuniform float uContour;\nuniform float uLawn;\nuniform vec3 uLawnA;\nuniform vec3 uLawnB;')
       .replace('#include <map_fragment>', `#include <map_fragment>
         diffuseColor.rgb = mix(diffuseColor.rgb, uMudCol, vSite * uMud);
         float cut = smoothstep(0.03, 0.35, vCut);
-        diffuseColor.rgb = mix(diffuseColor.rgb, uEarth, cut);   // open earth wherever the ground has been dug`)
+        diffuseColor.rgb = mix(diffuseColor.rgb, uEarth, cut);   // open earth wherever the ground has been dug
+        vec2 lp = (vWPos.xz - vec2(12.5, -2.5)) / vec2(23.0, 17.5);   // the lawn spreads from the house, mown in stripes
+        float la = atan(lp.y, lp.x);
+        float ld = length(lp) * (1.0 + 0.07 * sin(la * 5.0) + 0.04 * cos(la * 3.0));
+        float lawn = (1.0 - smoothstep(uLawn - 0.07, uLawn, ld)) * step(0.001, uLawn) * (1.0 - cut);
+        diffuseColor.rgb = mix(diffuseColor.rgb, mix(uLawnA, uLawnB, step(0.5, fract((vWPos.x * 0.6 + vWPos.z) * 0.28))), lawn);`)
       // the contour lines go on last, over the lit and tone-mapped ground, so strong light cannot wash them out
       .replace('#include <dithering_fragment>', `
         float cy = (vWPos.y - 0.25) * 2.0;
@@ -365,12 +372,12 @@ function getTextures() {
     for (let r = 0; r < rows; r++) {
       const off = (r % 2) * (w / 4);
       for (let c = 0; c < 2; c++) {
-        const x = (c * (w / 2) + off) % w, v = (rnd() - 0.5) * 0.07;
+        const x = (c * (w / 2) + off) % w, v = (rnd() - 0.5) * 0.17;
         g.fillStyle = v > 0 ? `rgba(255,250,238,${v})` : `rgba(120,98,66,${-v})`;
         g.fillRect(x, r * rh, w / 2, rh);
-        g.fillStyle = 'rgba(70,56,38,0.42)'; g.fillRect(x, r * rh, 1.6, rh);
+        g.fillStyle = 'rgba(62,48,30,0.62)'; g.fillRect(x, r * rh, 1.6, rh);
       }
-      g.fillStyle = 'rgba(70,56,38,0.42)'; g.fillRect(0, r * rh, w, 1.6);
+      g.fillStyle = 'rgba(62,48,30,0.62)'; g.fillRect(0, r * rh, w, 1.6);
     }
     addGrain(g, w, h, 8);
   });
@@ -471,7 +478,8 @@ export function buildHouse(opts = {}) {
   const dash = new THREE.LineDashedMaterial({ color: C.ink, dashSize: 0.16, gapSize: 0.11, transparent: true, opacity: 0.45 });
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const TX = getTextures();
-  const ground = buildGround(opts.groundMat || groundMaterial(), { uv: opts.groundUV });
+  const groundMat = opts.groundMat || groundMaterial();
+  const ground = buildGround(groundMat, { uv: opts.groundUV });
   root.add(ground.mesh);
 
   // Each colour of the house brings its texture, relief and gloss
@@ -501,7 +509,7 @@ export function buildHouse(opts = {}) {
     }
   }
   const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, ...tradeProps(color), ...o });
-  const glassM = (o = {}) => mat(C.glass, { transparent: true, opacity: 0.24, roughness: 0.06, metalness: 0.15, envMapIntensity: 1.35, depthWrite: false, side: THREE.DoubleSide, ...o });
+  const glassM = (o = {}) => mat(C.glass, { transparent: true, opacity: 0.3, roughness: 0.06, metalness: 0.15, envMapIntensity: 1.35, depthWrite: false, side: THREE.DoubleSide, ...o });
   const glowM = () => new THREE.MeshStandardMaterial({ color: 0xfff3dc, emissive: 0xffcf8a, emissiveIntensity: 0, roughness: 0.4 });
   const glows = [];
   function solid(geo, m, { edges = 28, cast = true, uvMode = 'box' } = {}) {
@@ -568,6 +576,7 @@ export function buildHouse(opts = {}) {
     const g = boxGroup(list);
     g.rotation.y = ry;
     const holder = new THREE.Group(); holder.add(g); holder.position.set(x, y, z);
+    holder.userData.info = list.info;
     return holder;
   }
 
@@ -620,13 +629,25 @@ export function buildHouse(opts = {}) {
     return axis === 'x' ? g.rotateY(Math.PI / 2).translate(t0, 0, 0) : g.translate(0, 0, t0);
   }
 
+  // What a part is, in words, for the label that follows the build. Lengths as on a German plan: metres with a comma.
+  const fm = v => v.toFixed(2).replace('.', ',');
+  const cmOf = v => v < 0.02 ? `${Math.round(v * 1000)} mm` : `${Math.round(v * 100)} cm`;
+  const lvl = y => (Math.abs(y) < 0.005 ? '±' : y > 0 ? '+' : '−') + fm(Math.abs(y));
+  const levelOf = y => y < -1 ? 'Poolgeschoss' : y < 2 ? 'Wohngeschoss' : 'Obergeschoss';
+  function sizeOf(bb) {
+    const dx = bb.max.x - bb.min.x, dy = bb.max.y - bb.min.y, dz = bb.max.z - bb.min.z;
+    const all = [Math.max(dx, dz), Math.min(dx, dz), dy], main = all.filter(v => v >= 0.1), thin = all.filter(v => v < 0.1 && v > 0.001);
+    return (main.length ? main.map(fm).join(' × ') + ' m' : '') + (thin.length ? `${main.length ? ' · ' : ''}d ${cmOf(Math.min(...thin))}` : '');
+  }
+  const tagged = (L, info) => { L.info = info; return L; };
+
   // Register a part. how: 'drop' (craned in), 'rise' (grows up from its base),
   // 'grow' (scales from nothing), 'show' (just appears).
   function add(obj, phase, order, how = 'drop', o = {}) {
     const ph = PHASES[phase], span = ph.w1 - ph.w0;
     const lifted = how === 'drop' && phase >= 3 && phase <= 7;
     const d = o.d ?? (lifted ? 0.36 : Math.min(0.8, span * 0.3));
-    const t0 = ph.w0 + clamp01(order) * (span - d);
+    const t0 = o.at ?? (ph.w0 + clamp01(order) * (span - d));
     const pivot = new THREE.Group();
     root.add(pivot); pivot.add(obj);
     const bb = new THREE.Box3().setFromObject(obj);
@@ -650,7 +671,8 @@ export function buildHouse(opts = {}) {
       drop: o.h ?? 2.6, hot: o.hot ?? true, lift: o.lift ?? lifted,
       mats, edgeMats, home: obj.position.clone(),
       top: V((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2),
-      spanX: Math.max(0.4, (bb.max.x - bb.min.x) * 0.32), spanZ: Math.max(0.4, (bb.max.z - bb.min.z) * 0.32), s: 0 };
+      spanX: Math.max(0.4, (bb.max.x - bb.min.x) * 0.32), spanZ: Math.max(0.4, (bb.max.z - bb.min.z) * 0.32), s: 0,
+      site: !!o.site, baseY: base.y, info: o.info ? { name: o.info[0], mat: o.info[1] || '', dims: o.info[2] || sizeOf(bb) } : null };
     if (opts.ghost && o.ghost !== false && phase >= 2) {
       pivot.updateMatrixWorld(true);
       obj.traverse(c => {
@@ -668,6 +690,10 @@ export function buildHouse(opts = {}) {
   }
   // a lamp shade that glows at handover: its material is kept so update() can turn it up
   const shade = (geo, x, y, z) => { const m = glowM(); glows.push(m); const s = new THREE.Mesh(geo, m); s.position.set(x, y, z); s.userData.glow = true; return s; };
+
+  // the crane, the machines, the falsework, the scaffold, the stores and the people (site.js)
+  const site = buildSite({ C, V, add, mat, ink, natural, glassM, PIT, TOWER });
+  const diggerPart = site.digger;
 
   // ---------------------------------------------------------------- 0 site set-up
   {
@@ -692,7 +718,7 @@ export function buildHouse(opts = {}) {
       for (let j = 1; j < 9; j++) pts.push(P(k, j * H / 9), P(1 - k, j * H / 9));
       g.add(lines(pts, fenceM));
       g.add(box(0.6, 0.12, 0.25, C.dark, ax, natural(ax, az), az, { cast: false, edges: 0 }));
-      add(g, 0, 0.75 * i / fence.length, 'rise', { base: V(ax, natural(ax, az), az), until: 36.2 + 0.5 * i / fence.length, ghost: false, hot: false, d: 0.3 });
+      add(g, 0, 0.75 * i / fence.length, 'rise', { base: V(ax, natural(ax, az), az), until: 36.2 + 0.5 * i / fence.length, ghost: false, hot: false, d: 0.3, info: ['Bauzaunfeld', 'Stahlgitter, verzinkt', '3,40 × 2,00 m'] });
     });
 
     // the site office and its neighbours, on the level ground of the court
@@ -707,20 +733,20 @@ export function buildHouse(opts = {}) {
     cabin.add(box(0.85, 2.05, 0.05, C.frame, 2.35, 0.2, 1.27, { cast: false }));
     cabin.rotation.y = Math.PI / 2;
     const cabinAt = new THREE.Group(); cabinAt.add(cabin); cabinAt.position.set(-9.4, 0, -3.6);
-    add(cabinAt, 0, 0.35, 'drop', { until: 36.0, ghost: false, h: 3, d: 0.3 });
-    add(box(1.1, 2.3, 1.1, 0x8FA0A6, -9.6, 0, 1.6), 0, 0.45, 'drop', { until: 36.0, ghost: false, d: 0.3 });
+    add(cabinAt, 0, 0.35, 'drop', { until: 36.0, ghost: false, h: 3, d: 0.3, info: ['Baucontainer', 'Stahl, gedämmt', '6,00 × 2,50 × 2,60 m'] });
+    add(box(1.1, 2.3, 1.1, 0x8FA0A6, -9.6, 0, 1.6), 0, 0.45, 'drop', { until: 36.0, ghost: false, d: 0.3, info: ['Bautoilette', 'Kunststoff'] });
     const skip = new THREE.Group();
     const sk = new THREE.ExtrudeGeometry(new THREE.Shape([[-2, 0], [2, 0], [2.6, 1.4], [-2.6, 1.4]].map(([u, v]) => new THREE.Vector2(u, v))), { depth: 1.8, bevelEnabled: false }).translate(0, 0, -0.9);
     skip.add(solid(sk, C.machine));
     skip.position.set(0.4, 0, -13.2);
-    add(skip, 0, 0.6, 'drop', { until: 35.6, ghost: false, d: 0.3 });
+    add(skip, 0, 0.6, 'drop', { until: 35.6, ghost: false, d: 0.3, info: ['Schuttmulde', 'Stahl', '7 m³'] });
     // travertine on pallets, waiting for the facade
     for (let i = 0; i < 3; i++) {
       const pal = new THREE.Group();
       pal.add(box(1.4, 0.15, 1.2, C.teak, 0, 0, 0));
       pal.add(box(1.3, 0.62, 1.1, C.clad, 0, 0.15, 0));
       pal.position.set(-1.0 + i * 1.8, 0, 9.4);
-      add(pal, 8, 0.0, 'drop', { until: 25.4 + i * 1.3, ghost: false, d: 0.3, h: 1.5, hot: false });
+      add(pal, 8, 0.0, 'drop', { until: 25.4 + i * 1.3, ghost: false, d: 0.3, h: 1.5, hot: false, info: ['Travertin auf Palette', 'Naturstein, Platten 3 cm'] });
     }
 
     // the setting out: the footprint and the pool pegged and strung across the slope
@@ -737,7 +763,7 @@ export function buildHouse(opts = {}) {
     drape(x0 - 1.5, -1.6, x1 + 1.5, -1.6);
     so.add(lines(pts, new THREE.LineBasicMaterial({ color: C.accent })));
     for (const px of [x0, x1]) for (const pz of [z0, z1]) so.add(box(0.08, 0.7, 0.08, C.teak, px, natural(px, pz) - 0.1, pz, { cast: false, edges: 0 }));
-    add(so, 0, 0.9, 'show', { until: 1.3, ghost: false, out: 0.3, hot: false });
+    add(so, 0, 0.9, 'show', { until: 1.3, ghost: false, out: 0.3, hot: false, info: ['Absteckung', 'Schnur und Holzpflöcke', '14,60 × 12,00 m'] });
   }
 
   // ---------------------------------------------------------------- 1 excavation
@@ -748,20 +774,6 @@ export function buildHouse(opts = {}) {
     spoil.position.set(-5.2, 0, 9.6);
     root.add(spoil);
   }
-  let diggerPart = null;
-  {
-    const digger = new THREE.Group();
-    digger.add(box(2.6, 0.55, 0.5, C.dark, 0, 0, -0.75));
-    digger.add(box(2.6, 0.55, 0.5, C.dark, 0, 0, 0.75));
-    digger.add(box(2.4, 0.7, 2.0, C.machine, 0.1, 0.6, 0));
-    digger.add(box(1.0, 1.1, 0.9, C.machine, 0.6, 1.3, 0.45));
-    digger.add(box(0.9, 0.7, 0.04, C.glass, 0.6, 1.55, 0.92, { cast: false }));
-    digger.add(beam(V(-0.6, 1.2, -0.3), V(-2.4, 2.6, -0.3), 0.3, 0.35, C.machine), beam(V(-2.4, 2.6, -0.3), V(-3.6, 0.4, -0.3), 0.25, 0.3, C.machine), box(0.7, 0.55, 0.8, C.dark, -3.6, 0.0, -0.3));
-    digger.rotation.y = Math.PI * 0.07;
-    const at = new THREE.Group(); at.add(digger); at.position.set(11.6, 0, -2.2);
-    diggerPart = add(at, 1, 0, 'show', { until: 4.2, out: 0.3, ghost: false, d: 0.1, hot: false, base: V(11.6, 0, -2.2) });   // gone before the slab is poured
-  }
-
   // ---------------------------------------------------------------- the structure
   // what a face is made of: raw concrete first, then travertine outside, plaster and oak inside, timber under the overhangs
   const SL = { all: 'conc', top: 'floorL', bot: 'conc' };                   // slab of the pool level
@@ -777,11 +789,15 @@ export function buildHouse(opts = {}) {
     oak: [8, 0.48, 0.18, C.oak], gravel: [6, 0.82, 0.14, C.gravel], pave: [9, 0.0, 0.1, C.pave],
   };
   const wave = (k, x) => FIN[k][1] + FIN[k][2] * clamp01((x - 3) / 20);
-  function finish(kind, geo, x, how) {
+  const FIN_INFO = {
+    clad: ['Travertinfassade', 'Römischer Travertin, 3 cm, hinterlüftet'], soffit: ['Holzuntersicht', 'Eiche, geölt'], plaster: ['Innenputz', 'Kalkputz, 12 mm'],
+    floorL: ['Travertinboden', 'Travertin, geschliffen'], oak: ['Eichendielen', 'Europäische Eiche, geölt'], gravel: ['Dachkies', 'Kies 16/32 auf Abdichtung'], pave: ['Terrassenbelag', 'Travertinplatten'],
+  };
+  function finish(kind, geo, x, how, info) {
     const f = FIN[kind]; if (!f) return;
     const quiet = kind === 'plaster' || kind === 'soffit';
     const g = solid(geo, f[3], { edges: kind === 'clad' ? 24 : 0, cast: kind === 'clad' });
-    add(g, f[0], wave(kind, x), how || (kind === 'clad' ? 'rise' : 'show'), { d: kind === 'clad' ? 0.7 : 0.4, hot: !quiet, ghost: false });
+    add(g, f[0], wave(kind, x), how || (kind === 'clad' ? 'rise' : 'show'), { d: kind === 'clad' ? 0.7 : 0.4, hot: !quiet, ghost: false, info: info || FIN_INFO[kind] });
   }
   const boxG = (x0, y0, z0, x1, y1, z1) => new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
 
@@ -795,7 +811,8 @@ export function buildHouse(opts = {}) {
     for (let i = 0; i < n; i++) {
       const p0 = a0 + (a1 - a0) * i / n, p1 = a0 + (a1 - a0) * (i + 1) / n;
       const hs = holes.filter(h => h[1] > p0 + 1e-6 && h[0] < p1 - 1e-6).map(h => [Math.max(h[0], p0), Math.min(h[1], p1), h[2], h[3]]);
-      add(solid(plateGeo(axis, t0, t1, p0, b0, p1, b1, hs), C.concrete), phase, o0 + (o1 - o0) * (n > 1 ? i / (n - 1) : 0), 'drop', { h: 3.0 });
+      add(solid(plateGeo(axis, t0, t1, p0, b0, p1, b1, hs), C.concrete), phase, o0 + (o1 - o0) * (n > 1 ? i / (n - 1) : 0), 'drop', { h: 3.0,
+        info: [`Wandelement ${levelOf((b0 + b1) / 2)}`, `Stahlbeton C30/37, Fertigteil${hs.length ? ', mit Öffnung' : ''}`, `${fm(p1 - p0)} × ${fm(b1 - b0)} m · d ${cmOf(t1 - t0)}`] });
       const cx = axis === 'x' ? t0 : (p0 + p1) / 2;
       // each of its two faces: [key in the spec, travertine from..to, plaster from..to]
       for (const [k, ca, cb, pa, pb] of [[axis === 'x' ? 'nx' : 'nz', t0 - TC, t0, t0 - TP, t0], [axis === 'x' ? 'px' : 'pz', t1, t1 + TC, t1, t1 + TP]]) {
@@ -807,9 +824,10 @@ export function buildHouse(opts = {}) {
     // the ends and the top of a travertine wall, where they are left open to the weather
     if (sp.all === 'clad') {
       const E = (a, s) => axis === 'x' ? boxG(t0 - TC, b0, Math.min(a, a + s * TC), t1 + TC, b1, Math.max(a, a + s * TC)) : boxG(Math.min(a, a + s * TC), b0, t0 - TC, Math.max(a, a + s * TC), b1, t1 + TC);
-      if (o.end0) finish('clad', E(a0, -1), axis === 'x' ? t0 : a0);
-      if (o.end1) finish('clad', E(a1, 1), axis === 'x' ? t0 : a1);
-      if (o.top) finish('clad', axis === 'x' ? boxG(t0 - TC, b1, a0, t1 + TC, b1 + TC, a1) : boxG(a0, b1, t0 - TC, a1, b1 + TC, t1 + TC), axis === 'x' ? t0 : (a0 + a1) / 2);
+      const endInfo = ['Travertin an der Wandstirn', 'Römischer Travertin, 3 cm'];
+      if (o.end0) finish('clad', E(a0, -1), axis === 'x' ? t0 : a0, null, endInfo);
+      if (o.end1) finish('clad', E(a1, 1), axis === 'x' ? t0 : a1, null, endInfo);
+      if (o.top) finish('clad', axis === 'x' ? boxG(t0 - TC, b1, a0, t1 + TC, b1 + TC, a1) : boxG(a0, b1, t0 - TC, a1, b1 + TC, t1 + TC), axis === 'x' ? t0 : (a0 + a1) / 2, null, ['Mauerabdeckung', 'Travertin, 3 cm']);
     }
     // the windows in its holes: a slim dark frame and the pane
     for (const h of holes) {
@@ -820,7 +838,7 @@ export function buildHouse(opts = {}) {
       B(-0.035, 0.035, h[0], h[0] + f, h[2] + f, h[3] - f, 'steel'); B(-0.035, 0.035, h[1] - f, h[1], h[2] + f, h[3] - f, 'steel');
       if (h[1] - h[0] > 3) { const c = (h[0] + h[1]) / 2; B(-0.035, 0.035, c - 0.02, c + 0.02, h[2] + f, h[3] - f, 'steel'); }
       B(-0.01, 0.01, h[0] + f, h[1] - f, h[2] + f, h[3] - f, 'glass');
-      add(boxGroup(L), 7, 0.6 + 0.3 * clamp01(((axis === 'x' ? t0 : (h[0] + h[1]) / 2) - 3) / 20), 'drop', { h: 1.2, d: 0.3 });
+      add(boxGroup(L), 7, 0.6 + 0.3 * clamp01(((axis === 'x' ? t0 : (h[0] + h[1]) / 2) - 3) / 20), 'drop', { h: 1.2, d: 0.3, info: ['Fenster', 'Stahlrahmen, Dreifach-Isolierglas', `${fm(h[1] - h[0])} × ${fm(h[3] - h[2])} m`] });
     }
   }
 
@@ -829,19 +847,22 @@ export function buildHouse(opts = {}) {
     const n = Math.max(1, Math.round((x1 - x0) / 2.6));
     for (let i = 0; i < n; i++) {
       const xa = x0 + (x1 - x0) * i / n, xb = x0 + (x1 - x0) * (i + 1) / n;
-      add(bx(xa, y0, z0, xb, y1, z1, C.concrete), phase, o0 + (o1 - o0) * (n > 1 ? i / (n - 1) : 0), how, how === 'rise' ? { d: 0.5 } : { h: 2.6 });
+      const what = how === 'rise' ? ['Bodenplatte', 'Ortbeton C30/37, bewehrt'] : phase === 6 ? ['Dachplatte', 'Stahlbeton, Fertigteil'] : ['Deckenplatte', 'Stahlbeton, Fertigteil'];
+      add(bx(xa, y0, z0, xb, y1, z1, C.concrete), phase, o0 + (o1 - o0) * (n > 1 ? i / (n - 1) : 0), how, { ...(how === 'rise' ? { d: 0.5 } : { h: 2.6 }),
+        info: [`${what[0]} ${lvl(y1)}`, what[1], `${fm(xb - xa)} × ${fm(z1 - z0)} m · d ${cmOf(y1 - y0)}`] });
     }
     const cx = (x0 + x1) / 2;
     if (FIN[spec.top]) finish(spec.top, boxG(x0, y1, z0, x1, y1 + 0.02, z1), cx);
-    if (FIN[spec.bot]) finish(spec.bot, boxG(x0, y0 - TP, z0, x1, y0, z1), cx);
+    if (FIN[spec.bot]) finish(spec.bot, boxG(x0, y0 - TP, z0, x1, y0, z1), cx, null, spec.bot === 'plaster' ? ['Deckenputz', 'Kalkputz, 12 mm'] : null);
     if (spec.all === 'clad') {
       const g = mergeGeometries([boxG(x0 - TC, y0 - TP, z0 - TC, x0, y1 + 0.02, z1 + TC), boxG(x1, y0 - TP, z0 - TC, x1 + TC, y1 + 0.02, z1 + TC), boxG(x0, y0 - TP, z0 - TC, x1, y1 + 0.02, z0), boxG(x0, y0 - TP, z1, x1, y1 + 0.02, z1 + TC)]);
-      finish('clad', g, cx);
+      finish('clad', g, cx, null, ['Travertin an der Deckenstirn', 'Römischer Travertin, 3 cm']);
     }
   }
 
   // ---- 2 foundations: strip footings on the floor of the pit, then the slab of the pool level
-  FOOTINGS.forEach(([x0, z0, x1, z1], i) => add(bx(x0, -4.3, z0, x1, -3.6, z1, C.concrete), 2, i * 0.13, 'rise', { d: 0.5 }));
+  FOOTINGS.forEach(([x0, z0, x1, z1], i) => add(bx(x0, -4.3, z0, x1, -3.6, z1, C.concrete), 2, i * 0.13, 'rise', { d: 0.5,
+    info: ['Streifenfundament', 'Beton C30/37, bewehrt', `${fm(Math.max(x1 - x0, z1 - z0))} × ${fm(Math.min(x1 - x0, z1 - z0))} m · h 70 cm`] }));
   slab(4.0, -3.6, -7.7, 18.3, -3.2, 3.7, SL, 2, 0.55, 0.92, 'rise');
 
   // ---- 3 pool level: the walls that hold the hill back, then the living level slab, which runs out as the balcony
@@ -869,8 +890,8 @@ export function buildHouse(opts = {}) {
       L.push([4.02, Math.max(yb, yb + t - 0.42), z0, 5.2, yb + t, z0 + run, 'conc', true]);
       T.push([4.02, yb + t, z0 - 0.02, 5.2, yb + t + 0.03, z0 + run, 'oak', false]);
     }
-    add(boxGroup(L), phase, ord, 'drop', { h: 3.2 });
-    add(boxGroup(T), 8, 0.62, 'show', { d: 0.4, ghost: false });
+    add(boxGroup(L), phase, ord, 'drop', { h: 3.2, info: ['Treppenlauf, 18 Stufen', 'Stahlbeton, Fertigteil', '1,18 × 4,80 m · Steigung 17,8 cm'] });
+    add(boxGroup(T), 8, 0.62, 'show', { d: 0.4, ghost: false, info: ['Trittstufen', 'Eiche massiv, 3 cm', '18 Stück · 1,18 × 0,27 m'] });
   };
   flight(-3.2, 4, 0.5);
   slab(4.0, 2.85, -1.75, 16.2, 3.2, 3.7, SG, 4, 0.6, 0.78);
@@ -889,16 +910,16 @@ export function buildHouse(opts = {}) {
   wall('z', 3.7, 4.0, 4.0, 16.6, 3.2, 6.4, [[9.0, 14.0, 4.0, 5.9]], WS, 5, 0.6, 0.74, { end1: true });
   wall('z', -1.75, -1.45, 4.0, 20.4, 3.2, 7.2, [[4.0, 15.4, 3.2, 5.9, 'open']], 'clad', 5, 0.78, 0.96, { end1: true });
   // the stone canopy over the door to the court
-  finish('clad', boxG(2.75, 2.5, 0.3, 3.7, 2.68, 2.2), 3);
+  finish('clad', boxG(2.75, 2.5, 0.3, 3.7, 2.68, 2.2), 3, null, ['Vordach über der Hoftür', 'Travertin']);
 
   // ---- 6 roofs, and the deep edge beams that close the frames of the two upper boxes
   slab(4.0, 6.4, -1.45, 16.6, 6.8, 4.0, RF, 6, 0.0, 0.3);
-  add(bx(16.1, 6.05, -1.45, 16.6, 6.4, 3.7, C.concrete), 6, 0.34, 'drop', { h: 2.4 });
+  add(bx(16.1, 6.05, -1.45, 16.6, 6.4, 3.7, C.concrete), 6, 0.34, 'drop', { h: 2.4, info: ['Randbalken', 'Stahlbeton, Fertigteil'] });
   slab(4.0, 7.2, -8.0, 17.4, 7.6, -1.45, RF, 6, 0.38, 0.66);
   slab(17.4, 7.2, -8.0, 20.4, 7.6, -1.45, { all: 'clad', top: 'gravel', bot: 'soffit' }, 6, 0.7, 0.7);
-  add(bx(20.1, 6.8, -7.7, 20.4, 7.2, -1.75, C.concrete), 6, 0.76, 'drop', { h: 2.4 });
-  finish('clad', boxG(16.1 - TC, 6.05 - TC, -1.45, 16.6 + TC, 6.4, 3.7 + TC), 16.3);
-  finish('clad', boxG(20.1 - TC, 6.8 - TC, -7.7 - TC, 20.4 + TC, 7.2, -1.75 + TC), 20.2);
+  add(bx(20.1, 6.8, -7.7, 20.4, 7.2, -1.75, C.concrete), 6, 0.76, 'drop', { h: 2.4, info: ['Randbalken', 'Stahlbeton, Fertigteil'] });
+  finish('clad', boxG(16.1 - TC, 6.05 - TC, -1.45, 16.6 + TC, 6.4, 3.7 + TC), 16.3, null, ['Travertin am Randbalken', 'Römischer Travertin, 3 cm']);
+  finish('clad', boxG(20.1 - TC, 6.8 - TC, -7.7 - TC, 20.4 + TC, 7.2, -1.75 + TC), 20.2, null, ['Travertin am Randbalken', 'Römischer Travertin, 3 cm']);
 
   // ---------------------------------------------------------------- 7 glazing
   // Slim floor to ceiling glazing in n panes: the frame is craned in, then every pane. Pane `door` is left for the sliding leaf.
@@ -909,8 +930,8 @@ export function buildHouse(opts = {}) {
     const F = [];
     for (let i = 0; i <= n; i++) { const a = a0 + i * step; F.push(B(-0.045, 0.045, Math.max(a0, a - 0.022), Math.min(a1, a + 0.022), y0, y1, 'steel')); }
     F.push(B(-0.045, 0.045, a0, a1, y0, y0 + 0.045, 'steel'), B(-0.045, 0.045, a0, a1, y1 - 0.045, y1, 'steel'));
-    add(boxGroup(F), 7, ord, 'drop', { h: 1.8, d: 0.3 });
-    for (let i = 0; i < n; i++) if (i !== door) add(boxGroup([B(-0.015, 0.015, a0 + i * step + 0.02, a0 + (i + 1) * step - 0.02, y0 + 0.04, y1 - 0.04, 'glass')]), 7, ord + 0.02 + i * 0.014, 'drop', { h: 1.4, d: 0.26, ghost: false });
+    add(boxGroup(F), 7, ord, 'drop', { h: 1.8, d: 0.3, info: ['Fensterrahmen', 'Stahlprofile, dunkel beschichtet', `${fm(a1 - a0)} × ${fm(y1 - y0)} m`] });
+    for (let i = 0; i < n; i++) if (i !== door) add(boxGroup([B(-0.015, 0.015, a0 + i * step + 0.02, a0 + (i + 1) * step - 0.02, y0 + 0.04, y1 - 0.04, 'glass')]), 7, ord + 0.02 + i * 0.014, 'drop', { h: 1.4, d: 0.26, ghost: false, info: ['Glasscheibe', 'Dreifach-Isolierglas', `${fm(step - 0.04)} × ${fm(y1 - y0 - 0.08)} m`] });
   }
   glazing('x', DOOR0.x, -7.7, -1.6, -3.2, -0.35, 4, 2);
   glazing('x', 16.6, -1.6, 3.7, -3.2, -0.35, 4);
@@ -919,7 +940,7 @@ export function buildHouse(opts = {}) {
   glazing('x', 17.5, -1.45, 3.7, 0, 2.85, 4);
   glazing('x', 16.2, -1.45, 3.7, 3.2, 6.05, 4);
   glazing('x', 17.4, -7.7, -1.75, 3.2, 7.2, 4);
-  add(boxGroup([[17.355, 5.9, -7.7, 17.445, 5.96, -1.75, 'steel', true]]), 7, gOrd, 'drop', { h: 1.2, d: 0.26 });
+  add(boxGroup([[17.355, 5.9, -7.7, 17.445, 5.96, -1.75, 'steel', true]]), 7, gOrd, 'drop', { h: 1.2, d: 0.26, info: ['Kämpferprofil', 'Stahl, dunkel beschichtet'] });
 
   // the two sliding doors: living room to balcony, pool level to terrace
   const slider = (D, ord) => {
@@ -931,7 +952,7 @@ export function buildHouse(opts = {}) {
       [-0.009, 0.095, -D.w / 2 + 0.05, 0.009, D.h - 0.095, D.w / 2 - 0.05, 'glass', false],
     ]);
     const holder = new THREE.Group(); holder.add(leaf); holder.position.set(D.x, D.y, D.zc);
-    add(holder, 7, ord, 'drop', { h: 1.4, d: 0.26, base: V(D.x, D.y, D.zc) });
+    add(holder, 7, ord, 'drop', { h: 1.4, d: 0.26, base: V(D.x, D.y, D.zc), info: ['Schiebetür', 'Stahlrahmen, Isolierglas', `${fm(D.w)} × ${fm(D.h)} m`] });
     return leaf;
   };
   const leaf1 = slider(DOOR, 0.3), leaf0 = slider(DOOR0, 0.02);
@@ -940,7 +961,7 @@ export function buildHouse(opts = {}) {
   let rOrd = 0.72;
   const rail = (axis, t, a0, a1, y, h = 1.05) => {
     const B = (ta, tb, ya, yb, m) => axis === 'x' ? [t + ta, ya, a0, t + tb, yb, a1, m, m === 'steel'] : [a0, ya, t + ta, a1, yb, t + tb, m, m === 'steel'];
-    add(boxGroup([B(-0.025, 0.025, y, y + 0.05, 'steel'), B(-0.01, 0.01, y + 0.05, y + h, 'glass'), B(-0.013, 0.013, y + h, y + h + 0.012, 'galv')]), 7, rOrd, 'drop', { h: 1.0, d: 0.26 });
+    add(boxGroup([B(-0.025, 0.025, y, y + 0.05, 'steel'), B(-0.01, 0.01, y + 0.05, y + h, 'glass'), B(-0.013, 0.013, y + h, y + h + 0.012, 'galv')]), 7, rOrd, 'drop', { h: 1.0, d: 0.26, info: ['Glasbrüstung', 'Verbundglas im Stahlschuh', `${fm(a1 - a0)} × ${fm(h)} m`] });
     rOrd += 0.024;
   };
   rail('x', 19.14, -8.0, -1.6, 0); rail('z', -7.96, 18.3, 19.1, 0); rail('z', -1.64, 18.0, 19.1, 0);     // balcony
@@ -954,11 +975,11 @@ export function buildHouse(opts = {}) {
   const courtDoor = boxGroup([[-0.05, 0, 0, 0.05, 2.4, 1.3, 'teak', true], [0.05, 0.95, 1.12, 0.08, 1.35, 1.15, 'brass', false], [-0.08, 0.95, 1.12, -0.05, 1.35, 1.15, 'brass', false]]);
   {
     const holder = new THREE.Group(); holder.add(courtDoor); holder.position.set(3.85, 0.02, 0.6);
-    add(holder, 8, 0.24, 'drop', { h: 0.8, d: 0.4, base: V(3.85, 0.02, 0.6) });
+    add(holder, 8, 0.24, 'drop', { h: 0.8, d: 0.4, base: V(3.85, 0.02, 0.6), info: ['Hoftür', 'Teak, Griff aus Messing', '1,30 × 2,40 m'] });
   }
-  const J = (name, phase, ord, fill) => { const L = []; fill((x0, y0, z0, x1, y1, z1, m, e = true) => L.push([x0, y0, z0, x1, y1, z1, m, e])); add(boxGroup(L), phase, ord, 'drop', { h: 0.7, d: 0.4, lift: false }); };
+  const J = (info, phase, ord, fill) => { const L = []; fill((x0, y0, z0, x1, y1, z1, m, e = true) => L.push([x0, y0, z0, x1, y1, z1, m, e])); add(boxGroup(L), phase, ord, 'drop', { h: 0.7, d: 0.4, lift: false, info }); };
   // Upper level: walnut and travertine library on the north wall of the studio (x 8.0 to 13.5)
-  J('library', 8, 0.7, (F) => {
+  J(['Bibliothek', 'Nussbaum, Ablage aus Travertin'], 8, 0.7, (F) => {
     const LX = 8.0, LZ = -7.7, FL = (d0, y0, u0, d1, y1, u1, m, e) => F(LX + u0, y0, LZ + d0, LX + u1, y1, LZ + d1, m, e);
     FL(0, 3.22, 0, 0.48, 3.26, 5.5, 'ink', false); FL(0, 3.26, 0, 0.50, 3.92, 5.5, 'walnut'); FL(0, 3.92, 0, 0.53, 3.97, 5.5, 'travertine');
     FL(0, 3.97, 0, 0.05, 5.86, 5.5, 'walnut'); FL(0, 5.82, 0, 0.42, 5.86, 5.5, 'walnut');
@@ -976,12 +997,12 @@ export function buildHouse(opts = {}) {
     }
   });
   // the bed in the cantilever, looking out through the loggia
-  J('bed', 8, 0.76, (F) => {
+  J(['Bett', 'Nussbaum, Leinen'], 8, 0.76, (F) => {
     F(14.0, 3.22, -7.7, 16.7, 4.25, -7.62, 'walnut'); F(14.25, 3.22, -7.62, 16.45, 3.46, -5.45, 'walnut'); F(14.3, 3.46, -7.6, 16.4, 3.68, -5.5, 'linen');
     F(14.45, 3.68, -7.56, 15.25, 3.82, -7.12, 'linen', false); F(15.45, 3.68, -7.56, 16.25, 3.82, -7.12, 'linen', false); F(14.3, 3.68, -6.3, 16.4, 3.72, -5.5, 'sofaDark', false);
   });
   // Living level: the tall walnut kitchen run on the south wall (x 7.0 to 11.3)
-  J('kitchen', 8, 0.84, (F) => {
+  J(['Küchenzeile', 'Nussbaum, Arbeitsplatte aus Travertin'], 8, 0.84, (F) => {
     const KX = 7.0, KZ = 3.7, FK = (d0, y0, u0, d1, y1, u1, m, e) => F(KX + u0, y0, KZ - d1, KX + u1, y1, KZ - d0, m, e);
     FK(0, 0.02, 0, 0.62, 0.08, 4.3, 'ink', false); FK(0, 0.08, 0, 0.66, 2.68, 1.25, 'walnut'); FK(0.66, 0.75, 1.18, 0.69, 1.85, 1.21, 'brass', false);
     FK(0, 0.08, 1.26, 0.66, 0.88, 2.15, 'walnut'); FK(0, 0.88, 1.26, 0.67, 1.52, 2.15, 'ink'); FK(0.67, 0.94, 1.32, 0.69, 1.46, 2.09, 'cabGlass', false);
@@ -990,7 +1011,7 @@ export function buildHouse(opts = {}) {
     FK(0, 2.68, 0, 0.68, 2.85, 4.3, 'plaster', false);
   });
   // the waterfall island in front of it (x 7.5 to 10.82, z 0.95 to 2.01)
-  J('island', 8, 0.9, (F) => {
+  J(['Kücheninsel', 'Travertin, Kern aus Nussbaum'], 8, 0.9, (F) => {
     const IX = 7.5 - 6.14, IZ = 0.95 + 4.68, FI = (x0, y0, z0, x1, y1, z1, m, e) => F(x0 + IX, y0, z0 + IZ, x1 + IX, y1, z1 + IZ, m, e);
     FI(6.22, 0.02, -4.58, 9.38, 0.08, -3.72, 'ink', false); FI(6.2, 0.08, -4.62, 9.4, 0.88, -3.7, 'walnut'); FI(6.14, 0.02, -4.68, 6.2, 0.94, -3.62, 'travertine');
     FI(9.4, 0.02, -4.68, 9.46, 0.94, -3.62, 'travertine'); FI(6.14, 0.88, -4.68, 9.46, 0.94, -3.62, 'travertine'); FI(7.4, 0.94, -4.05, 8.1, 0.95, -3.75, 'ink', false);
@@ -999,36 +1020,37 @@ export function buildHouse(opts = {}) {
   // ---------------------------------------------------------------- 9 the pool, the garden and the furniture
   const Y0 = -3.18, Y1 = 0.02, Y2 = 3.22, TY = -3.14;   // the finished floors
   // the court, the pool terrace on its plinth, the long step down to the water, the pool standing on the bank
-  add(bx(-7, -0.05, -6.5, 3.7, 0.03, 3.5, C.pave, { edges: 20 }), 9, 0.02, 'rise', { d: 0.5, ghost: false });
-  add(bx(18.3, -4.5, -8.0, 21.3, -3.16, 4.0, C.pave), 9, 0.06, 'rise', { d: 0.6 });
-  add(bx(21.3, -4.7, -8.0, 21.9, -3.34, 4.0, C.pave), 9, 0.1, 'rise', { d: 0.6 });
-  add(bx(21.9, -5.4, -8.0, 28.5, -3.34, -7.6, C.pave), 9, 0.14, 'rise', { d: 0.6 });
-  add(bx(21.9, -5.4, 3.6, 28.5, -3.34, 4.0, C.pave), 9, 0.16, 'rise', { d: 0.6 });
-  add(bx(28.2, -6.0, -7.6, 28.5, -3.47, 3.6, C.pave), 9, 0.2, 'rise', { d: 0.6 });
-  add(bx(21.9, -5.0, -7.6, 28.2, -3.45, 3.6, mat(C.water), { edges: 0, cast: false }), 9, 0.27, 'rise', { d: 0.7, ghost: false });
+  add(bx(-7, -0.05, -6.5, 3.7, 0.03, 3.5, C.pave, { edges: 20 }), 9, 0.02, 'rise', { d: 0.5, ghost: false, info: ['Hofbelag', 'Travertinplatten', '10,70 × 10,00 m'] });
+  add(bx(18.3, -4.5, -8.0, 21.3, -3.16, 4.0, C.pave), 9, 0.06, 'rise', { d: 0.6, info: ['Poolterrasse', 'Travertin auf Betonsockel', '3,00 × 12,00 m'] });
+  add(bx(21.3, -4.7, -8.0, 21.9, -3.34, 4.0, C.pave), 9, 0.1, 'rise', { d: 0.6, info: ['Stufe zum Wasser', 'Travertin', '0,60 × 12,00 m'] });
+  add(bx(21.9, -5.4, -8.0, 28.5, -3.34, -7.6, C.pave), 9, 0.14, 'rise', { d: 0.6, info: ['Beckenwand Nord', 'Stahlbeton, Travertin'] });
+  add(bx(21.9, -5.4, 3.6, 28.5, -3.34, 4.0, C.pave), 9, 0.16, 'rise', { d: 0.6, info: ['Beckenwand Süd', 'Stahlbeton, Travertin'] });
+  add(bx(28.2, -6.0, -7.6, 28.5, -3.47, 3.6, C.pave), 9, 0.2, 'rise', { d: 0.6, info: ['Überlaufkante', 'Stahlbeton, Travertin'] });
+  add(bx(21.9, -5.0, -7.6, 28.2, -3.45, 3.6, mat(C.water), { edges: 0, cast: false }), 9, 0.27, 'rise', { d: 0.7, ghost: false, info: ['Poolwasser', 'Rund 109 m³', '6,30 × 11,20 m · 1,55 m tief'] });
 
   // furniture, as simple as a model maker would cut it
-  const sofa = (w, d = 0.95) => [
+  const sofa0 = (w, d = 0.95) => [
     [-w / 2, 0.06, -d / 2, w / 2, 0.3, d / 2, 'linen', true], [-w / 2, 0.3, -d / 2, w / 2, 0.76, -d / 2 + 0.2, 'linen', true],
     [-w / 2, 0.3, -d / 2 + 0.2, -w / 2 + 0.18, 0.6, d / 2, 'linen', true], [w / 2 - 0.18, 0.3, -d / 2 + 0.2, w / 2, 0.6, d / 2, 'linen', true],
     [-w / 2 + 0.2, 0.3, -d / 2 + 0.22, -0.02, 0.44, d / 2 - 0.02, 'linen', false], [0.02, 0.3, -d / 2 + 0.22, w / 2 - 0.2, 0.44, d / 2 - 0.02, 'linen', false],
     [-w / 2 + 0.24, 0.44, -d / 2 + 0.2, -w / 2 + 0.64, 0.74, -d / 2 + 0.36, 'terracotta', false], [w / 2 - 0.64, 0.44, -d / 2 + 0.2, w / 2 - 0.24, 0.74, -d / 2 + 0.36, 'sofaDark', false],
   ];
-  const chair = () => [
+  const chair0 = () => [
     [-0.4, 0, -0.38, -0.34, 0.56, 0.38, 'walnut', true], [0.34, 0, -0.38, 0.4, 0.56, 0.38, 'walnut', true],
     [-0.34, 0.26, -0.34, 0.34, 0.4, 0.36, 'leather', false], [-0.34, 0.4, -0.38, 0.34, 0.86, -0.26, 'leather', true],
   ];
-  const lowTable = (w, d) => [[-w / 2, 0.3, -d / 2, w / 2, 0.36, d / 2, 'travertine', true], [-w / 2 + 0.12, 0, -d / 2 + 0.1, -w / 2 + 0.4, 0.3, d / 2 - 0.1, 'travertine', true], [w / 2 - 0.4, 0, -d / 2 + 0.1, w / 2 - 0.12, 0.3, d / 2 - 0.1, 'travertine', true], [-0.15, 0.36, -0.1, 0.15, 0.4, 0.1, 'book3', false]];
-  const credenza = (w) => [[-w / 2, 0.02, -0.22, w / 2, 0.1, 0.22, 'ink', false], [-w / 2, 0.1, -0.24, w / 2, 0.62, 0.24, 'walnut', true], [-w / 2 - 0.02, 0.62, -0.26, w / 2 + 0.02, 0.66, 0.26, 'travertine', true]];
+  const lowTable0 = (w, d) => [[-w / 2, 0.3, -d / 2, w / 2, 0.36, d / 2, 'travertine', true], [-w / 2 + 0.12, 0, -d / 2 + 0.1, -w / 2 + 0.4, 0.3, d / 2 - 0.1, 'travertine', true], [w / 2 - 0.4, 0, -d / 2 + 0.1, w / 2 - 0.12, 0.3, d / 2 - 0.1, 'travertine', true], [-0.15, 0.36, -0.1, 0.15, 0.4, 0.1, 'book3', false]];
+  const credenza0 = (w) => [[-w / 2, 0.02, -0.22, w / 2, 0.1, 0.22, 'ink', false], [-w / 2, 0.1, -0.24, w / 2, 0.62, 0.24, 'walnut', true], [-w / 2 - 0.02, 0.62, -0.26, w / 2 + 0.02, 0.66, 0.26, 'travertine', true]];
   const rug = (w, d) => { const g = box(w, 0.018, d, mat(0xD4C8B4, { map: TX.rugMap, bumpMap: TX.fabricBump, bumpScale: 0.03, roughness: 0.94 }), 0, 0, 0, { edges: 0, cast: false }); return g; };
-  const rugAt = (w, d, x, y, z) => { const g = rug(w, d); g.position.set(x, y, z); return g; };
-  const lamp = (x, y, z, h = 1.5) => { const g = new THREE.Group(); g.add(cyl(0.16, 0.16, 0.03, 18, C.brass, x, y, z), cyl(0.016, 0.016, h, 10, C.brass, x, y + 0.03, z)); g.add(shade(new THREE.CylinderGeometry(0.2, 0.24, 0.3, 20), x, y + h + 0.1, z)); return g; };
-  const pendants = (list, yCeil, drop) => { const g = new THREE.Group(), pts = []; for (const [x, z] of list) { g.add(shade(new THREE.SphereGeometry(0.13, 18, 12), x, yCeil - drop, z)); pts.push(V(x, yCeil - drop + 0.12, z), V(x, yCeil, z)); } g.add(lines(pts)); return g; };
+  const rugAt = (w, d, x, y, z) => { const g = rug(w, d); g.position.set(x, y, z); g.userData.info = ['Teppich', 'Wolle, handgewebt']; return g; };
+  const lamp = (x, y, z, h = 1.5) => { const g = new THREE.Group(); g.add(cyl(0.16, 0.16, 0.03, 18, C.brass, x, y, z), cyl(0.016, 0.016, h, 10, C.brass, x, y + 0.03, z)); g.add(shade(new THREE.CylinderGeometry(0.2, 0.24, 0.3, 20), x, y + h + 0.1, z)); g.userData.info = ['Stehleuchte', 'Messing, Schirm aus Leinen']; return g; };
+  const pendants = (list, yCeil, drop) => { const g = new THREE.Group(), pts = []; for (const [x, z] of list) { g.add(shade(new THREE.SphereGeometry(0.13, 18, 12), x, yCeil - drop, z)); pts.push(V(x, yCeil - drop + 0.12, z), V(x, yCeil, z)); } g.add(lines(pts)); g.userData.info = ['Pendelleuchten', 'Opalglas', `${list.length} Stück`]; return g; };
   const olive = (x, y, z, k = 1) => {
     const g = new THREE.Group();
     g.add(cyl(0.3 * k, 0.24 * k, 0.5 * k, 18, C.travertine, x, y, z), cyl(0.04 * k, 0.06 * k, 1.2 * k, 8, 0x5D5246, x, y + 0.5 * k, z));
     g.add(solid(makeOrganicClusterGeo(0.62 * k, 0.5 * k, 0.58 * k, 1).translate(x, y + 1.95 * k, z), mat(0x7A885E, { bumpMap: TX.foliageBump, bumpScale: 0.024 }), { edges: 0 }));
     g.add(solid(makeOrganicClusterGeo(0.42 * k, 0.36 * k, 0.4 * k, 1).translate(x + 0.3 * k, y + 1.6 * k, z + 0.2 * k), mat(0x6C7A4F, { bumpMap: TX.foliageBump, bumpScale: 0.024 }), { edges: 0 }));
+    g.userData.info = ['Olivenbaum im Topf', 'Topf aus Travertin'];
     return g;
   };
   const trough = (x, y, z, w, d) => {
@@ -1038,14 +1060,17 @@ export function buildHouse(opts = {}) {
       const u = (i + 0.5) / n - 0.5, px = x + (w > d ? u * w : 0), pz = z + (w > d ? 0 : u * d);
       g.add(solid(makeOrganicClusterGeo(0.34, 0.26, 0.34, 1).translate(px, y + 0.56, pz), mat(i % 2 ? 0x67784C : 0x78875B, { bumpMap: TX.foliageBump, bumpScale: 0.024 }), { edges: 0 }));
     }
+    g.userData.info = ['Pflanztrog', 'Travertin, Gräser und Rosmarin'];
     return g;
   };
-  const F9 = (obj, ord, o = {}) => add(obj, 9, ord, 'drop', { h: 0.6, d: 0.34, lift: false, ...o });
+  const sofa = (...a) => tagged(sofa0(...a), ['Sofa', 'Leinen, Bouclé']), chair = () => tagged(chair0(), ['Sessel', 'Nussbaum, Leder']);
+  const lowTable = (...a) => tagged(lowTable0(...a), ['Couchtisch', 'Travertin']), credenza = (...a) => tagged(credenza0(...a), ['Sideboard', 'Nussbaum, Platte aus Travertin']);
+  const F9 = (obj, ord, o = {}) => add(obj, 9, ord, 'drop', { h: 0.6, d: 0.34, lift: false, info: obj.userData.info, ...o });
   const R90 = Math.PI / 2;
 
   // upper level: the studio in front of the library, the lounge in bay A, two chairs in the loggia
   F9(rugAt(3.0, 2.0, 10.75, Y2, -5.1), 0.4, { ghost: false });
-  F9(piece([[-1.1, 0.72, -0.4, 1.1, 0.76, 0.4, 'walnut', true], [-1.06, 0, -0.36, -0.98, 0.72, 0.36, 'travertine', true], [0.98, 0, -0.36, 1.06, 0.72, 0.36, 'travertine', true], [-0.7, 0.76, -0.2, -0.35, 0.92, 0.02, 'clad', false], [0.3, 0.76, -0.15, 0.62, 0.8, 0.12, 'book1', false]], 10.75, Y2, -5.35), 0.42);
+  F9(piece(tagged([[-1.1, 0.72, -0.4, 1.1, 0.76, 0.4, 'walnut', true], [-1.06, 0, -0.36, -0.98, 0.72, 0.36, 'travertine', true], [0.98, 0, -0.36, 1.06, 0.72, 0.36, 'travertine', true], [-0.7, 0.76, -0.2, -0.35, 0.92, 0.02, 'clad', false], [0.3, 0.76, -0.15, 0.62, 0.8, 0.12, 'book1', false]], ['Schreibtisch', 'Nussbaum, Wangen aus Travertin']), 10.75, Y2, -5.35), 0.42);
   F9(piece(chair(), 10.75, Y2, -4.35, Math.PI), 0.44);
   F9(rugAt(3.6, 2.4, 10.6, Y2, 1.3), 0.45, { ghost: false });
   F9(piece(sofa(2.7), 10.6, Y2, 2.25, Math.PI), 0.47);
@@ -1054,19 +1079,19 @@ export function buildHouse(opts = {}) {
   F9(piece(chair(), 12.27, Y2, 0.62, Math.atan2(-1.67, 0.26)), 0.51);
   F9(piece(chair(), 18.85, Y2, -5.95, R90), 0.52);
   F9(piece(chair(), 18.85, Y2, -4.15, R90), 0.53);
-  F9(cyl(0.24, 0.24, 0.4, 24, C.travertine, 19.0, Y2, -5.05), 0.54);
+  F9(cyl(0.24, 0.24, 0.4, 24, C.travertine, 19.0, Y2, -5.05), 0.54, { info: ['Beistelltisch', 'Travertin'] });
   F9(lamp(8.3, Y2, 2.9), 0.55);
   F9(pendants([[10.75, -5.35], [15.35, -6.5]], 7.2, 1.7), 0.56, { ghost: false });
 
   // living level: stools at the island, the dining table by the glass, the living room behind the sliding door
-  for (let i = 0; i < 3; i++) F9(piece([[-0.19, 0.6, -0.18, 0.19, 0.66, 0.18, 'leather', true], [-0.17, 0, -0.16, -0.14, 0.6, -0.13, 'walnut', false], [0.14, 0, -0.16, 0.17, 0.6, -0.13, 'walnut', false], [-0.17, 0, 0.13, -0.14, 0.6, 0.16, 'walnut', false], [0.14, 0, 0.13, 0.17, 0.6, 0.16, 'walnut', false]], 8.2 + i * 0.95, Y1, 0.55), 0.58 + i * 0.006);
+  for (let i = 0; i < 3; i++) F9(piece(tagged([[-0.19, 0.6, -0.18, 0.19, 0.66, 0.18, 'leather', true], [-0.17, 0, -0.16, -0.14, 0.6, -0.13, 'walnut', false], [0.14, 0, -0.16, 0.17, 0.6, -0.13, 'walnut', false], [-0.17, 0, 0.13, -0.14, 0.6, 0.16, 'walnut', false], [0.14, 0, 0.13, 0.17, 0.6, 0.16, 'walnut', false]], ['Barhocker', 'Nussbaum, Leder']), 8.2 + i * 0.95, Y1, 0.55), 0.58 + i * 0.006);
   F9(pendants([[8.3, 1.48], [9.16, 1.48], [10.02, 1.48]], 2.85, 1.0), 0.6, { ghost: false });
   F9(rugAt(3.4, 2.2, 14.3, Y1, 1.05), 0.61, { ghost: false });
-  F9(piece([[-1.2, 0.72, -0.5, 1.2, 0.77, 0.5, 'oak', true], [-1.1, 0, -0.42, -1.02, 0.72, -0.34, 'oak', false], [1.02, 0, -0.42, 1.1, 0.72, -0.34, 'oak', false], [-1.1, 0, 0.34, -1.02, 0.72, 0.42, 'oak', false], [1.02, 0, 0.34, 1.1, 0.72, 0.42, 'oak', false], [-0.2, 0.77, -0.12, 0.2, 0.85, 0.12, 'terracotta', false]], 14.3, Y1, 1.05), 0.63);
-  for (let i = 0; i < 3; i++) for (const s of [-1, 1]) F9(piece([[-0.22, 0.42, -0.21, 0.22, 0.47, 0.21, 'leather', true], [-0.22, 0.47, -0.23, 0.22, 0.84, -0.18, 'oak', true], [-0.2, 0, -0.19, -0.16, 0.42, -0.15, 'oak', false], [0.16, 0, -0.19, 0.2, 0.42, -0.15, 'oak', false], [-0.2, 0, 0.15, -0.16, 0.42, 0.19, 'oak', false], [0.16, 0, 0.15, 0.2, 0.42, 0.19, 'oak', false]], 14.3 + (i - 1) * 0.75, Y1, 1.05 + s * 0.73, s > 0 ? Math.PI : 0), 0.645 + i * 0.006);
+  F9(piece(tagged([[-1.2, 0.72, -0.5, 1.2, 0.77, 0.5, 'oak', true], [-1.1, 0, -0.42, -1.02, 0.72, -0.34, 'oak', false], [1.02, 0, -0.42, 1.1, 0.72, -0.34, 'oak', false], [-1.1, 0, 0.34, -1.02, 0.72, 0.42, 'oak', false], [1.02, 0, 0.34, 1.1, 0.72, 0.42, 'oak', false], [-0.2, 0.77, -0.12, 0.2, 0.85, 0.12, 'terracotta', false]], ['Esstisch für sechs', 'Eiche massiv']), 14.3, Y1, 1.05), 0.63);
+  for (let i = 0; i < 3; i++) for (const s of [-1, 1]) F9(piece(tagged([[-0.22, 0.42, -0.21, 0.22, 0.47, 0.21, 'leather', true], [-0.22, 0.47, -0.23, 0.22, 0.84, -0.18, 'oak', true], [-0.2, 0, -0.19, -0.16, 0.42, -0.15, 'oak', false], [0.16, 0, -0.19, 0.2, 0.42, -0.15, 'oak', false], [-0.2, 0, 0.15, -0.16, 0.42, 0.19, 'oak', false], [0.16, 0, 0.15, 0.2, 0.42, 0.19, 'oak', false]], ['Stuhl', 'Eiche, Sitz aus Leder']), 14.3 + (i - 1) * 0.75, Y1, 1.05 + s * 0.73, s > 0 ? Math.PI : 0), 0.645 + i * 0.006);
   F9(pendants([[13.6, 1.05], [14.3, 1.05], [15.0, 1.05]], 2.85, 0.9), 0.67, { ghost: false });
   F9(rugAt(4.2, 3.2, 11.6, Y1, -5.3), 0.68, { ghost: false });
-  F9(piece([...sofa(3.0), [-1.5, 0.06, 0.475, -0.3, 0.3, 1.5, 'linen', true], [-1.48, 0.3, 0.49, -0.32, 0.44, 1.48, 'linen', false]], 9.9, Y1, -5.2, R90), 0.7);
+  F9(piece(tagged([...sofa(3.0), [-1.5, 0.06, 0.475, -0.3, 0.3, 1.5, 'linen', true], [-1.48, 0.3, 0.49, -0.32, 0.44, 1.48, 'linen', false]], ['Ecksofa', 'Leinen, Bouclé']), 9.9, Y1, -5.2, R90), 0.7);
   F9(piece(lowTable(1.5, 0.8), 12.2, Y1, -5.3, R90), 0.72);
   F9(piece(chair(), 14.1, Y1, -6.3, Math.atan2(12.2 - 14.1, -5.3 + 6.3)), 0.73);
   F9(piece(chair(), 14.2, Y1, -5.0, Math.atan2(12.2 - 14.2, -5.3 + 5.0)), 0.74);
@@ -1075,13 +1100,13 @@ export function buildHouse(opts = {}) {
     const art = new THREE.Group();
     art.add(bx(11.8, 1.05, -7.69, 13.3, 2.25, -7.66, C.dark, { edges: 0 }));
     art.add(bx(11.85, 1.1, -7.66, 13.25, 2.2, -7.652, mat(0xffffff, { map: TX.art1, roughness: 0.7 }), { edges: 0, uvMode: false }));
-    F9(art, 0.76, { ghost: false });
+    F9(art, 0.76, { ghost: false, info: ['Bild', 'Druck, gerahmt', '1,50 × 1,20 m'] });
   }
   F9(lamp(8.2, Y1, -6.9, 1.7), 0.765);
   F9(olive(15.0, Y1, -7.1), 0.77);
 
   // pool level: the lounge in front of the media wall, the sauna, the billiard table
-  J('media', 9, 0.79, (F) => { F(11.2, Y0, -7.7, 16.4, Y0 + 2.62, -7.62, 'walnut'); F(12.55, Y0 + 1.0, -7.62, 15.05, Y0 + 2.36, -7.575, 'ink'); });
+  J(['Medienwand', 'Nussbaum, furniert'], 9, 0.79, (F) => { F(11.2, Y0, -7.7, 16.4, Y0 + 2.62, -7.62, 'walnut'); F(12.55, Y0 + 1.0, -7.62, 15.05, Y0 + 2.36, -7.575, 'ink'); });
   F9(rugAt(4.0, 2.8, 13.5, Y0, -5.2), 0.8, { ghost: false });
   F9(piece(sofa(3.0), 13.6, Y0, -3.95, Math.PI), 0.81);
   F9(piece(lowTable(1.5, 0.8), 13.5, Y0, -5.55), 0.82);
@@ -1089,7 +1114,7 @@ export function buildHouse(opts = {}) {
   F9(piece(chair(), 16.7, Y0, -6.35, Math.atan2(13.5 - 16.7, -5.55 + 6.35)), 0.835);
   F9(piece(chair(), 10.6, Y0, -6.2, Math.atan2(13.5 - 10.6, -5.55 + 6.2)), 0.84);
   F9(lamp(16.9, Y0, -7.2, 1.4), 0.845);
-  J('sauna', 9, 0.86, (F) => {
+  J(['Sauna', 'Holz, Front aus Glas'], 9, 0.86, (F) => {
     const SA = [4.04, 1.05, 7.3, 3.66], SH = Y0 + 2.25;
     F(SA[0], Y0, SA[1], SA[2], Y0 + 0.06, SA[3], 'soffit', false); F(SA[0], Y0 + 0.06, SA[1], SA[0] + 0.07, SH, SA[3], 'soffit'); F(SA[0], Y0 + 0.06, SA[3] - 0.07, SA[2], SH, SA[3], 'soffit');
     F(SA[0], Y0 + 0.06, SA[1], SA[2] - 1.0, SH, SA[1] + 0.07, 'soffit'); F(SA[0], SH - 0.07, SA[1], SA[2], SH, SA[3], 'soffit'); F(SA[2] - 0.07, Y0 + 0.06, SA[1], SA[2], SH - 0.07, SA[1] + 0.07, 'ink');
@@ -1097,7 +1122,7 @@ export function buildHouse(opts = {}) {
     F(SA[0] + 0.07, Y0 + 0.44, SA[3] - 0.72, SA[2] - 0.6, Y0 + 0.5, SA[3] - 0.07, 'soffit', false); F(SA[0] + 0.07, Y0 + 0.9, SA[3] - 0.46, SA[2] - 0.6, Y0 + 0.96, SA[3] - 0.07, 'soffit', false);
     F(SA[0] + 0.2, Y0 + 0.06, SA[1] + 0.22, SA[0] + 0.72, Y0 + 0.72, SA[1] + 0.74, 'ink', false); F(SA[0] + 0.24, Y0 + 0.72, SA[1] + 0.26, SA[0] + 0.68, Y0 + 0.8, SA[1] + 0.7, 'travertine', false);
   });
-  J('billiard', 9, 0.89, (F) => {
+  J(['Billardtisch', 'Nussbaum, Tuch'], 9, 0.89, (F) => {
     const BX = 12.4, BZ = 1.05, BH = Y0 + 0.8;
     for (const sx of [-1.2, 1.2]) for (const sz of [-0.58, 0.58]) F(BX + sx - 0.08, Y0, BZ + sz - 0.08, BX + sx + 0.08, Y0 + 0.6, BZ + sz + 0.08, 'walnut', false);
     F(BX - 1.42, Y0 + 0.6, BZ - 0.785, BX + 1.42, BH, BZ + 0.785, 'walnut');
@@ -1112,63 +1137,134 @@ export function buildHouse(opts = {}) {
 
   // the pool terrace: sunloungers, a drum table, an olive in a stone planter
   const lounger = () => [[-0.32, 0.22, -0.95, 0.32, 0.3, 0.55, 'teak', true], [-0.3, 0.3, -0.93, 0.3, 0.37, 0.53, 'linen', false], [-0.3, 0, -0.9, -0.24, 0.22, -0.84, 'teak', false], [0.24, 0, -0.9, 0.3, 0.22, -0.84, 'teak', false], [-0.3, 0, 0.44, -0.24, 0.22, 0.5, 'teak', false], [0.24, 0, 0.44, 0.3, 0.22, 0.5, 'teak', false], [-0.32, 0.3, 0.55, 0.32, 0.72, 0.68, 'linen', true]];
-  for (const [i, z] of [-0.4, 0.5, 2.2].entries()) F9(piece(lounger(), 19.85, TY, z, -R90), 0.93 + i * 0.006);
-  F9(cyl(0.24, 0.24, 0.36, 24, C.travertine, 19.6, TY, 1.35), 0.95);
+  for (const [i, z] of [-0.4, 0.5, 2.2].entries()) F9(piece(tagged(lounger(), ['Sonnenliege', 'Teak, Auflage aus Leinen']), 19.85, TY, z, -R90), 0.93 + i * 0.006);
+  F9(cyl(0.24, 0.24, 0.36, 24, C.travertine, 19.6, TY, 1.35), 0.95, { info: ['Beistelltisch', 'Travertin'] });
   F9(olive(19.4, TY, -6.9, 1.15), 0.955);
   // planting: troughs on the balcony and on the upper terrace
   F9(trough(18.62, Y1, -7.2, 0.8, 1.2), 0.96);
   F9(trough(17.25, Y2, 1.15, 0.6, 4.6), 0.965);
 
+  // ---------------------------------------------------------------- the last details of the house
+  // dark copings close the parapets of both roofs; a hatch and two vents stand on the upper one
+  add(boxGroup([[3.67, 6.83, -1.45, 4.03, 6.88, 4.03, 'steel', true], [3.67, 6.83, 3.69, 16.63, 6.88, 4.03, 'steel', true], [16.27, 6.83, -1.45, 16.63, 6.88, 4.03, 'steel', true]]), 6, 0.93, 'drop', { h: 1.2, d: 0.3, info: ['Attikaabdeckung Süddach', 'Aluminium, dunkel beschichtet', '24,00 m · Zuschnitt 36 cm'] });
+  add(boxGroup([[3.67, 7.63, -8.03, 4.03, 7.68, -1.42, 'steel', true], [3.67, 7.63, -8.03, 20.43, 7.68, -7.69, 'steel', true], [20.07, 7.63, -8.03, 20.43, 7.68, -1.42, 'steel', true], [3.67, 7.63, -1.78, 20.43, 7.68, -1.42, 'steel', true]]), 6, 0.97, 'drop', { h: 1.2, d: 0.3, info: ['Attikaabdeckung Norddach', 'Aluminium, dunkel beschichtet', '46,00 m · Zuschnitt 36 cm'] });
+  add(boxGroup([[5.0, 7.62, -3.6, 6.1, 7.92, -2.5, 'steel', true], [5.08, 7.92, -3.52, 6.02, 7.95, -2.58, 'cabGlass', false], [9.2, 7.62, -5.2, 9.4, 8.1, -5.0, 'galv', false], [12.6, 7.62, -3.4, 12.8, 8.0, -3.2, 'galv', false], [8.0, 6.82, 1.0, 8.2, 7.25, 1.2, 'galv', false]]), 6, 0.99, 'drop', { h: 1.0, d: 0.3, info: ['Dachausstieg und Lüfter', 'Stahl, Glas', '1,10 × 1,10 m'] });
+  // two chairs and a table out on the balcony
+  F9(piece(chair(), 17.3, Y1, -6.8, R90), 0.772); F9(piece(chair(), 17.3, Y1, -5.8, R90), 0.775);
+  F9(cyl(0.22, 0.22, 0.4, 24, C.travertine, 18.1, Y1, -6.3), 0.778, { info: ['Beistelltisch', 'Travertin'] });
+  // sheer linen at the ends of every glass front
+  {
+    const cm = () => mat(0xF3EEE2, { transparent: true, opacity: 0.88, roughness: 0.95, side: THREE.DoubleSide });
+    const g = new THREE.Group();
+    for (const [x, z0, z1, y0, y1] of [[17.3, -1.35, -0.5, 0, 2.85], [17.3, 2.85, 3.65, 0, 2.85], [16.0, -1.35, -0.5, 3.2, 6.05], [16.0, 2.85, 3.65, 3.2, 6.05], [15.4, -7.6, -6.8, 0, 2.85],
+      [17.2, -7.6, -6.8, 3.2, 7.2], [17.2, -2.6, -1.85, 3.2, 7.2], [16.4, -1.45, -0.65, -3.2, -0.35], [18.04, -7.6, -6.8, -3.2, -0.35]]) g.add(bx(x - 0.03, y0 + 0.05, z0, x + 0.03, y1 - 0.05, z1, cm(), { edges: 0, cast: false, uvMode: false }));
+    add(g, 9, 0.925, 'show', { d: 0.3, ghost: false, hot: false, info: ['Vorhänge', 'Leinen, halbtransparent', 'raumhoch'] });
+  }
+  // at the pool: a handrail at the step and a parasol over the loungers
+  add(boxGroup([[21.86, -3.34, 2.6, 21.9, -2.5, 2.64, 'galv', false], [21.86, -3.34, 3.2, 21.9, -2.5, 3.24, 'galv', false], [21.86, -2.54, 2.6, 22.6, -2.5, 2.64, 'galv', false], [21.86, -2.54, 3.2, 22.6, -2.5, 3.24, 'galv', false],
+    [22.56, -3.7, 2.6, 22.6, -2.5, 2.64, 'galv', false], [22.56, -3.7, 3.2, 22.6, -2.5, 3.24, 'galv', false]]), 9, 0.32, 'drop', { h: 0.6, d: 0.3, lift: false, info: ['Poolgeländer', 'Edelstahl, gebürstet', 'Höhe 0,84 m'] });
+  {
+    const g = new THREE.Group();
+    g.add(cyl(0.03, 0.03, 2.5, 10, C.teak, 19.3, TY, 3.2), cyl(0.2, 0.22, 0.08, 16, C.travertine, 19.3, TY, 3.2));
+    const top = new THREE.Mesh(new THREE.ConeGeometry(1.55, 0.5, 8).translate(19.3, TY + 2.55, 3.2), mat(C.fabric, { side: THREE.DoubleSide }));
+    top.castShadow = true; top.receiveShadow = true; g.add(top);
+    F9(g, 0.957, { info: ['Sonnenschirm', 'Leinen, Mast aus Teak', 'Ø 3,10 m'] });
+  }
+  // a green fringe on both roofs
+  {
+    const cols = [0x67784C, 0x78875B, 0x8A9468], g = new THREE.Group();
+    let n = 0;
+    const tuft = (x, y, z) => g.add(solid(makeOrganicClusterGeo(0.34, 0.2, 0.3, 1).translate(x, y + 0.1, z), mat(cols[n++ % 3], { bumpMap: TX.foliageBump, bumpScale: 0.024 }), { edges: 0 }));
+    for (let z = -0.9; z <= 3.5; z += 0.72) tuft(15.75, 6.84, z);
+    for (let z = -7.3; z <= -2.1; z += 0.72) tuft(19.6, 7.64, z);
+    for (let x = 5.0; x <= 15.2; x += 0.78) tuft(x, 6.84, 3.3);
+    add(g, 9, 0.47, 'grow', { d: 0.4, hot: false, ghost: false, info: ['Dachbegrünung', 'Sedum und Gräser auf Substrat', 'Streifen 60 cm'] });
+  }
+
   // ---------------------------------------------------------------- surroundings: cypresses along the court, olives down the slope
   const trees = [];
   {
     const barkMat = mat(0x5D5246, { bumpMap: TX.woodBump, bumpScale: 0.022, roughness: 0.86 });
-    const springCols = [new THREE.Color(0x818C64), new THREE.Color(0x76825A), new THREE.Color(0x8C966E)];
-    const summerCols = [new THREE.Color(0x6D7E52), new THREE.Color(0x5C6D42), new THREE.Color(0x7F8E63)];
-    const cypressCols = [new THREE.Color(0x56664A), new THREE.Color(0x4A5A40), new THREE.Color(0x5F6F52)];
+    const hex = a => a.map(c => new THREE.Color(c));
+    const springCols = hex([0x818C64, 0x76825A, 0x8C966E]), summerCols = hex([0x6D7E52, 0x5C6D42, 0x7F8E63]);
+    const cypressCols = hex([0x55664A, 0x495A40, 0x60715A]), oliveCols = hex([0x74825E, 0x687653, 0x808E6A]);
+    // crowns of several soft lumps: [x, y, z, rx, ry, rz, colour]
     const SPEC = {
-      round: [[0, 4.4, 0, 2.1, 1.65, 2.0, 0], [-1.15, 3.85, 0.65, 1.45, 1.22, 1.4, 1], [1.1, 3.95, -0.55, 1.5, 1.25, 1.42, 2], [0.35, 4.95, 0.85, 1.38, 1.18, 1.35, 0], [-0.65, 4.8, -0.9, 1.35, 1.15, 1.3, 1]],
-      olive: [[-0.4, 3.0, 0, 1.7, 0.95, 1.5, 0], [0.9, 3.4, 0.3, 1.2, 0.75, 1.1, 1], [-0.2, 3.85, -0.4, 1.1, 0.65, 1.1, 2]],
-      cypress: [[0, 2.6, 0, 0.72, 2.1, 0.72, 0], [0, 4.6, 0, 0.5, 1.5, 0.5, 1]],
+      round: [[0, 4.4, 0, 2.1, 1.65, 2.0, 0], [-1.15, 3.85, 0.65, 1.45, 1.22, 1.4, 1], [1.1, 3.95, -0.55, 1.5, 1.25, 1.42, 2], [0.35, 4.95, 0.85, 1.38, 1.18, 1.35, 0], [-0.65, 4.8, -0.9, 1.35, 1.15, 1.3, 1], [0.85, 3.45, 0.95, 1.22, 1.02, 1.18, 2]],
+      olive: [[-0.4, 3.0, 0, 1.7, 0.95, 1.5, 0], [0.9, 3.4, 0.3, 1.2, 0.75, 1.1, 1], [-0.2, 3.85, -0.4, 1.1, 0.65, 1.1, 2], [0.55, 2.75, -0.75, 0.95, 0.6, 0.9, 1], [-1.1, 3.3, 0.6, 0.8, 0.55, 0.8, 2]],
+      cypress: [[0, 2.3, 0, 0.8, 1.9, 0.8, 0], [0.04, 4.25, 0.03, 0.62, 1.7, 0.62, 1], [0, 6.0, -0.02, 0.36, 1.3, 0.36, 2]],
     };
+    const barG = (a, b, r) => { const d = b.clone().sub(a), len = d.length(); return new THREE.BoxGeometry(r, len, r).translate(0, len / 2, 0).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), d.normalize())).translate(a.x, a.y, a.z); };
+    // one tree around its own foot: the bark, and the lumps of its crown sorted by colour
+    const treeGeo = (kind, k, near) => {
+      const th = kind === 'cypress' ? 1.2 : kind === 'olive' ? 2.4 : 3.1, bark = [new THREE.CylinderGeometry(0.11 * k, 0.22 * k, th * k, 10).translate(0, th * k / 2, 0)];
+      if (kind !== 'cypress') bark.push(barG(V(0, th * 0.68 * k, 0), V(-0.95 * k, (th + 0.5) * k, 0.5 * k), 0.11 * k), barG(V(0, th * 0.72 * k, 0), V(0.9 * k, (th + 0.6) * k, -0.45 * k), 0.1 * k), barG(V(0, th * 0.8 * k, 0), V(0.25 * k, (th + 1.1) * k, 0.7 * k), 0.09 * k));
+      const crown = [[], [], []];
+      for (const [cx, cy, cz, rx, ry, rz, ci] of SPEC[kind]) crown[ci].push(makeOrganicClusterGeo(rx * k, ry * k, rz * k, near ? 2 : 1).translate(cx * k, cy * k, cz * k));
+      return { bark, crown };
+    };
+    const COLS = { round: [springCols, summerCols], olive: [oliveCols, oliveCols], cypress: [cypressCols, cypressCols] };
+    const leafM = c => new THREE.MeshStandardMaterial({ color: c.clone(), bumpMap: TX.foliageBump, bumpScale: 0.028, roughness: 0.76, envMapIntensity: 0.4 });
+    const shadowed = m => { m.castShadow = true; m.receiveShadow = true; return m; };
+    // The standing trees are merged into one mesh of bark and one mesh per kind and leaf colour: a handful of draw calls for the whole wood.
+    const forest = { bark: [], round: [[], [], []], olive: [[], [], []], cypress: [[], [], []] };
     const tree = (kind, x, z, k, idx, wIn) => {
-      const t = new THREE.Group();
-      const th = kind === 'cypress' ? 1.2 : kind === 'olive' ? 2.4 : 3.1;
-      t.add(solid(new THREE.CylinderGeometry(0.11 * k, 0.22 * k, th * k, 8).translate(0, th * k / 2, 0), barkMat, { edges: 0 }));
-      if (kind !== 'cypress') {
-        t.add(beam(V(0, th * 0.7 * k, 0), V(-0.95 * k, (th + 0.5) * k, 0.5 * k), 0.11 * k, 0.11 * k, barkMat, { edges: 0 }));
-        t.add(beam(V(0, th * 0.72 * k, 0), V(0.9 * k, (th + 0.6) * k, -0.45 * k), 0.10 * k, 0.10 * k, barkMat, { edges: 0 }));
+      const y = natural(x, z) - 0.05, G = treeGeo(kind, k, Math.hypot(x - 12, z + 2) < 40);   // the far trees are cut more coarsely
+      if (wIn == null) {
+        const place = g => g.rotateY(idx * 0.85).translate(x, y, z);
+        for (const g of G.bark) forest.bark.push(place(g));
+        G.crown.forEach((list, ci) => { for (const g of list) forest[kind][ci].push(place(g)); });
+        return;
       }
-      const crown = new THREE.Group(), clusters = [];
-      for (const [cx, cy, cz, rx, ry, rz, ci] of SPEC[kind]) {
-        const a = kind === 'cypress' ? cypressCols[ci] : springCols[ci], b = kind === 'cypress' ? cypressCols[ci] : summerCols[ci];
-        const cm = new THREE.MeshStandardMaterial({ color: a.clone(), bumpMap: TX.foliageBump, bumpScale: 0.028, roughness: 0.76, envMapIntensity: 0.4 });
-        const m = new THREE.Mesh(makeOrganicClusterGeo(rx * k, ry * k, rz * k, 1).translate(cx * k, cy * k, cz * k), cm);
-        m.castShadow = true; m.receiveShadow = true;
-        crown.add(m); clusters.push({ mesh: m, spring: a, summer: b });
-      }
-      t.add(crown);
-      t.position.set(x, natural(x, z) - 0.05, z);
-      t.rotation.y = idx * 0.85;
-      if (wIn == null) { root.add(t); trees.push({ crown, clusters, grow: kind !== 'cypress' }); }
-      else { const h = new THREE.Group(); h.add(t); add(h, 9, wIn, 'grow', { d: 0.5, hot: false, ghost: false, base: V(x, natural(x, z) - 0.05, z) }); trees.push({ crown, clusters, grow: false, summer: true }); }
+      // a tree planted during the build stands alone, so it can grow in
+      const t = new THREE.Group(), clusters = [];
+      t.add(shadowed(new THREE.Mesh(mergeGeometries(G.bark), barkMat)));
+      G.crown.forEach((list, ci) => { if (!list.length) return; const c = COLS[kind][1][ci], m = shadowed(new THREE.Mesh(mergeGeometries(list), leafM(c))); t.add(m); clusters.push({ mesh: m, spring: c, summer: c }); });
+      t.position.set(x, y, z); t.rotation.y = idx * 0.85;
+      const h = new THREE.Group(); h.add(t);
+      add(h, 9, wIn, 'grow', { d: 0.5, hot: false, ghost: false, base: V(x, y, z), info: [kind === 'olive' ? 'Olivenbaum' : 'Laubbaum', 'Hochstamm mit Ballen', `Höhe ${fm((kind === 'olive' ? 4.5 : 6.1) * k)} m`] });
+      trees.push({ clusters, summer: true });
     };
     let n = 0;
     for (let z = -22; z <= 15; z += 3.5) tree('cypress', -15 + Math.sin(z) * 0.6, z + (rnd() - 0.5), 0.85 + rnd() * 0.35, n++);
     for (const [kind, x, z, k] of [['olive', -6, -23, 1.1], ['olive', -24, 4, 1.2], ['olive', 30, -24, 1.0], ['olive', 36, -10.5, 1.1], ['olive', 37, 16, 1.2], ['olive', -2.5, 19, 1.0],
-      ['olive', 42, 2, 1.1], ['round', -22, -12, 1.2], ['olive', 46, -24, 1.2], ['olive', 52, 10, 1.3], ['round', -30, -26, 1.4], ['round', -34, 14, 1.3], ['olive', 14, -30, 1.2], ['round', 6, 30, 1.3], ['olive', 60, -8, 1.4]]) tree(kind, x, z, k, n++);
+      ['olive', 42, 2, 1.1], ['round', -22, -12, 1.2], ['olive', 46, -24, 1.2], ['olive', 52, 10, 1.3], ['round', -30, -26, 1.4], ['round', -34, 14, 1.3], ['olive', 14, -30, 1.2], ['round', 6, 30, 1.3], ['olive', 60, -8, 1.4],
+      ['round', -20, 24, 1.2], ['olive', 24, 24, 1.1], ['round', 44, -34, 1.4], ['cypress', 34, -19, 1.1], ['cypress', 35.6, -17.6, 0.9], ['cypress', -9, 21, 1.0]]) tree(kind, x, z, k, n++);
     // the garden, planted in the last weeks: olives either side of the pool and below it
-    for (const [kind, x, z, k, w] of [['olive', 24.6, -11.6, 0.9, 0.36], ['olive', 31.6, -9.6, 0.95, 0.38], ['round', 33.8, -2.2, 0.8, 0.4], ['olive', 15.2, 8.4, 0.85, 0.42]]) tree(kind, x, z, k, n++, w);
+    for (const [kind, x, z, k, w] of [['olive', 24.6, -11.6, 0.9, 0.36], ['olive', 31.6, -9.6, 0.95, 0.38], ['round', 33.8, -2.2, 0.8, 0.4], ['olive', 15.2, 8.4, 0.85, 0.42], ['olive', -9.2, 8.8, 0.8, 0.43]]) tree(kind, x, z, k, n++, w);
+    root.add(shadowed(new THREE.Mesh(mergeGeometries(forest.bark), barkMat)));
+    for (const kind of ['round', 'olive', 'cypress']) {
+      const clusters = [];
+      forest[kind].forEach((list, ci) => { if (!list.length) return; const m = shadowed(new THREE.Mesh(mergeGeometries(list), leafM(COLS[kind][0][ci]))); root.add(m); clusters.push({ mesh: m, spring: COLS[kind][0][ci], summer: COLS[kind][1][ci] }); });
+      trees.push({ clusters });
+    }
   }
-  // rosemary and lavender banks either side of the pool
+  // shrubs in soft mounds round the house, rosemary and lavender banks either side of the pool
   {
-    const cols = [0x67784C, 0x7C8A63, 0x8A86A0];
+    const cols = [0x67784C, 0x56673D, 0x78875B, 0x8A86A0];
+    const mound = (x, z, s, ci, lumps) => {
+      const g = new THREE.Group(), y = natural(x, z);
+      for (const [mx, my, mz, rx, ry, rz] of lumps) g.add(solid(makeOrganicClusterGeo(rx * s, ry * s, rz * s, 2).translate(x + mx * s, y + my * s, z + mz * s), mat(cols[(ci++) % cols.length], { bumpMap: TX.foliageBump, bumpScale: 0.025, roughness: 0.74 }), { edges: 0 }));
+      return g;
+    };
+    const SHRUB = [[0, 0.38, 0, 0.65, 0.44, 0.58], [-0.35, 0.28, 0.18, 0.46, 0.34, 0.42], [0.32, 0.26, -0.15, 0.42, 0.32, 0.38]];
+    [[2.6, 5.6], [-7.9, -7.6], [-7.7, 4.8], [2.9, -9.8], [19.4, 6.3], [17.4, 6.9], [19.0, -10.3], [10.4, 6.6], [6.2, -10.6], [-3.4, -7.4], [12.6, -10.4]].forEach(([x, z], i) =>
+      add(mound(x, z, 0.9 + (i % 3) * 0.16, i, SHRUB), 9, 0.4 + i * 0.008, 'grow', { d: 0.3, hot: false, ghost: false, info: ['Strauch', 'Pistazie, Myrte, Rosmarin', 'Ballen 60 cm'] }));
     let i = 0;
     for (const zz of [-9.3, 5.3]) for (let x = 19.4; x < 28.6; x += 1.5) {
       const z = zz + Math.sin(x * 1.7) * 0.3;
-      const g = solid(makeOrganicClusterGeo(0.62, 0.36, 0.52, 1).translate(x, natural(x, z) + 0.2, z), mat(cols[i % 3], { bumpMap: TX.foliageBump, bumpScale: 0.024 }), { edges: 0 });
-      add(g, 9, 0.44 + (i++) * 0.006, 'grow', { d: 0.3, hot: false, ghost: false });
+      add(mound(x, z, 1, 1 + i, [[0, 0.2, 0, 0.62, 0.36, 0.52]]), 9, 0.44 + (i++) * 0.006, 'grow', { d: 0.3, hot: false, ghost: false, info: ['Lavendel und Rosmarin', 'Stauden im Kiesbeet', 'Pflanzabstand 1,50 m'] });
     }
+    // stepping stones from the gate to the court
+    for (let k = 0; k < 9; k++) {
+      const t = k / 8, x = -7.4 + 1.6 * t + Math.sin(t * 3.0) * 0.5, z = 12.6 - 8.6 * t, g = bx(x - 0.55, natural(x, z) + 0.005, z - 0.36, x + 0.55, natural(x, z) + 0.06, z + 0.36, C.pave);
+      add(g, 9, 0.3 + k * 0.007, 'show', { d: 0.15, ghost: false, info: ['Trittplatte', 'Travertin, gestockt', '1,10 × 0,72 m'] });
+    }
+  }
+  // the lake in the valley, the long water the house looks out on
+  {
+    const lake = new THREE.Mesh(new THREE.PlaneGeometry(900, 1600).rotateX(-Math.PI / 2).translate(560, -19.3, 0), new THREE.MeshStandardMaterial({ color: 0x9FBEC6, roughness: 0.18, metalness: 0.1, envMapIntensity: 1.1 }));
+    lake.receiveShadow = false; root.add(lake);
   }
 
   // ---------------------------------------------------------------- warm light at handover
@@ -1179,41 +1275,18 @@ export function buildHouse(opts = {}) {
   // It stands on the court, west of the house. Its jib turns to whatever is being set, the trolley runs out over it.
   const crane = new THREE.Group(), jib = new THREE.Group(), trolley = new THREE.Group();
   const cable = lines([V(), V(), V(), V(), V(), V()], new THREE.LineBasicMaterial({ color: C.ink }));
-  const hookBlock = box(0.3, 0.38, 0.24, C.accent, 0, 0, 0, { cast: false });
   const JY = TOWER.h + 0.7;
-  {
-    const s = 0.8, h = TOWER.h, braces = [], L = TOWER.jib, Lc = TOWER.tail;
-    const P = [[-s, -s], [s, -s], [s, s], [-s, s]];
-    const mast = [[-2.5, -1, -2.5, 2.5, 0, 2.5, 'conc', true], [-1.1, h, -1.1, 1.1, h + 0.7, 1.1, 'machine', true], [0.65, h - 1.35, 0.55, 2.35, h + 0.55, 2.05, 'machine', true], [2.35, h - 0.75, 0.65, 2.4, h + 0.35, 1.95, 'cabGlass', false]];
-    for (const [cx, cz] of P) mast.push([cx - 0.06, 0, cz - 0.06, cx + 0.06, h, cz + 0.06, 'machine', false]);
-    for (let y = 0; y < h - 0.1; y += 1.6) for (let i = 0; i < 4; i++) {
-      const a = P[i], b = P[(i + 1) % 4];
-      braces.push(V(a[0], y, a[1]), V(b[0], y, b[1]), V(a[0], y, a[1]), V(b[0], Math.min(h, y + 1.6), b[1]));
-    }
-    const craneLine = new THREE.LineBasicMaterial({ color: 0x8C6A16 });
-    crane.add(boxGroup(mast), lines(braces, craneLine));
-    crane.position.set(TOWER.x, natural(TOWER.x, TOWER.z), TOWER.z);
-    // the jib runs along its own +z, the counter jib along -z
-    const jb = [[-0.6, 0, 0.9, -0.5, 0.1, L, 'machine', false], [0.5, 0, 0.9, 0.6, 0.1, L, 'machine', false], [-0.6, 0, -Lc, -0.48, 0.12, -0.9, 'machine', false], [0.48, 0, -Lc, 0.6, 0.12, -0.9, 'machine', false],
-      [-0.8, -1.3, -Lc + 0.3, 0.8, 0.3, -Lc + 2.9, 'conc', true]];
-    const jl = [], th = 1.4, topY = (u) => th * (1 - (u - 0.9) / (L - 0.9)) + 0.25 * (u - 0.9) / (L - 0.9);
-    for (let u = 0.9; u < L - 1.6; u += 1.8) {
-      const u2 = u + 1.8;
-      jl.push(V(-0.55, 0.05, u), V(0.55, 0.05, u), V(-0.55, 0.05, u), V(0, topY(u2), u2), V(0.55, 0.05, u), V(0, topY(u2), u2), V(0, topY(u), u), V(-0.55, 0.05, u2), V(0, topY(u), u), V(0.55, 0.05, u2), V(0, topY(u), u), V(0, topY(u2), u2));
-    }
-    for (let u = -0.9; u > -Lc; u -= 1.5) jl.push(V(-0.55, 0.06, u), V(0.55, 0.06, u));
-    for (const sx of [-0.6, 0.6]) for (const sz of [-0.7, 0.7]) jl.push(V(sx, 0, sz), V(0, 5, 0));
-    jl.push(V(0, 5, 0), V(0, topY(L * 0.62), L * 0.62), V(0, 5, 0), V(0, 0.1, -Lc + 0.5));
-    jib.add(boxGroup(jb), lines(jl, craneLine));
-    trolley.add(box(1.0, 0.3, 1.0, C.dark, 0, -0.35, 0, { cast: false }));
-    jib.add(trolley);
-    jib.position.y = JY;
-    crane.add(jib);
-    root.add(crane, cable, hookBlock);
-  }
+  const CR = site.crane(), hookBlock = CR.hook;
+  crane.add(CR.mast);
+  crane.position.set(TOWER.x, natural(TOWER.x, TOWER.z), TOWER.z);
+  jib.add(CR.jib); trolley.add(CR.trolley); jib.add(trolley);
+  jib.position.y = JY;
+  crane.add(jib);
+  root.add(crane, cable, hookBlock);
+  const craneAt = T => smooth(5.0, 5.9, T) * (1 - smooth(24.8, 25.6, T));
   // where the crane wants to be (set by update) and where it is (eased by tick)
-  const want = { yaw: 0.9, r: 14, hook: V(TOWER.x, JY - 6, TOWER.z), sling: null };
-  const now = { yaw: 0.9, r: 14 };
+  const want = { yaw: 0, r: 14, hook: V(TOWER.x, JY - 6, TOWER.z), sling: null };   // parked along the slope, clear of the pit
+  const now = { yaw: 0, r: 14 };
   const trolleyAt = V();
   function tick(dt = 0.016, snap = false) {
     if (!crane.visible) return;
@@ -1221,7 +1294,7 @@ export function buildHouse(opts = {}) {
     let dy = want.yaw - now.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     now.yaw += dy * k; now.r += (want.r - now.r) * k;
     jib.rotation.y = now.yaw; trolley.position.z = now.r;
-    trolley.updateWorldMatrix(true, false); trolleyAt.setFromMatrixPosition(trolley.matrixWorld); trolleyAt.y -= 0.35;
+    trolley.updateWorldMatrix(true, false); trolleyAt.setFromMatrixPosition(trolley.matrixWorld); trolleyAt.y -= 0.5;
     const s = want.sling, swivel = s ? want.hook.clone().add(V(0, 1.15, 0)) : V(trolleyAt.x, Math.min(trolleyAt.y - 1, want.hook.y), trolleyAt.z);
     const a = s ? want.hook.clone().add(V(-s[0] * 0.5, -0.02, -s[1] * 0.35)) : swivel, b = s ? want.hook.clone().add(V(s[0] * 0.5, -0.02, s[1] * 0.35)) : swivel;
     cable.geometry.setFromPoints([trolleyAt, swivel, swivel, a, swivel, b]);
@@ -1229,7 +1302,9 @@ export function buildHouse(opts = {}) {
   }
 
   const hookAt = new THREE.Vector3();
+  let lastT = 0;
   function update(T, o = {}) {
+    lastT = T;
     let active = null;
     const calm = !!o.calm;
     for (const p of parts) {
@@ -1274,13 +1349,14 @@ export function buildHouse(opts = {}) {
 
     // Excavation: the pit deepens under the excavator, the spoil heap grows on the court, then the backfill takes it away.
     ground.update(T);
+    groundMat.userData.u.uLawn.value = opts.lawn === false ? 0 : 1.25 * smooth(33.4, 36.6, T);
     const dig = digAt(T), heap = dig * (1 - smooth(FILL[0], FILL[1], T));
     spoil.visible = heap > 0.01;
     spoil.scale.set(0.4 + 0.6 * heap, Math.max(1e-3, heap), 0.4 + 0.6 * heap);
     if (diggerPart.pivot.visible) diggerPart.pivot.position.y = groundAt(11.6, -2.2, T);
 
     // Crane: goes up while the slab cures, comes down once the glass is in.
-    const cr = smooth(5.0, 5.9, T) * (1 - smooth(24.8, 25.6, T));
+    const cr = craneAt(T);
     crane.visible = cable.visible = hookBlock.visible = cr > 0.01;
     crane.scale.y = Math.max(1e-3, easeOut(cr));
     if (active && cr >= 1) {
@@ -1290,7 +1366,7 @@ export function buildHouse(opts = {}) {
       want.r = Math.min(TOWER.jib - 1, Math.max(3, Math.hypot(hookAt.x - TOWER.x, hookAt.z - TOWER.z)));
     } else {
       want.sling = null; want.hook.set(0, (JY - 5) * crane.scale.y, 0);
-      if (cr < 1) { want.yaw = 0.9; want.r = 14; }
+      if (cr < 1) { want.yaw = 0; want.r = 14; }
     }
     tick(0.016, calm || !!o.snap);
 
@@ -1302,12 +1378,39 @@ export function buildHouse(opts = {}) {
     // the trees come into leaf between March and June
     const leaf = smooth(2, 12, T);
     for (const tr of trees) {
-      if (tr.grow) tr.crown.scale.setScalar(0.8 + 0.2 * leaf);
       for (const cl of tr.clusters) cl.mesh.material.color.copy(cl.spring).lerp(cl.summer, tr.summer ? 1 : leaf);
     }
     return active;
   }
 
+  // The part in work, in words: what it is, how big, what it is made of, and where it stands right now.
+  // A part that is moving wins; then the earthworks and the crane; then the part that has just landed.
+  const labelPos = new THREE.Vector3();
+  const codeAt = T => { let c = PHASES[0].code; for (const ph of PHASES) if (T >= ph.w0) c = ph.code; return c; };
+  function label() {
+    const T = lastT;
+    let moving = null, landed = null;
+    for (const p of parts) {
+      if (!p.info || !p.pivot.visible || T > p.until) continue;
+      if (T >= p.t0 && T < p.t1) { if (!moving || p.t0 > moving.t0) moving = p; }
+      else if (T >= p.t1 && T < p.t1 + 0.25) { if (!landed || p.t1 > landed.t1) landed = p; }
+    }
+    if (!moving) {
+      const dig = digAt(T), fill = smooth(FILL[0], FILL[1], T), cr = craneAt(T);
+      if (dig > 0 && dig < 1) return { code: PHASES[1].code, name: 'Aushub der Baugrube', dims: '17,80 × 15,20 m · Sohle −4,30', mat: 'Rund 900 m³ Erdreich · Böschung 1 : 1,15', pos: labelPos.set(7.5, groundAt(7.5, -5, T), -5) };
+      if (fill > 0 && fill < 1) return { code: PHASES[3].code, name: 'Verfüllung des Arbeitsraums', dims: 'bis Geländehöhe', mat: 'Aushubmaterial, lagenweise verdichtet', pos: labelPos.set(10, groundAt(10, 5.4, T), 5.4) };
+      if (cr > 0 && cr < 1 && T < 10) return { code: PHASES[2].code, name: 'Turmdrehkran', dims: `Ausleger ${TOWER.jib} m · Hakenhöhe ${fm(TOWER.h)} m`, mat: 'Stahlfachwerk, 8 Ballastblöcke', pos: labelPos.set(TOWER.x, JY * crane.scale.y, TOWER.z) };
+    }
+    const p = moving || landed;
+    if (!p) return null;
+    labelPos.copy(p.top);
+    if (p.how === 'drop') labelPos.y += p.obj.position.y - p.home.y;
+    else if (p.how === 'rise') labelPos.y = p.pivot.position.y + (p.top.y - p.baseY) * p.pivot.scale.y;
+    else if (p.how === 'grow') labelPos.sub(p.pivot.position).multiplyScalar(p.pivot.scale.x).add(p.pivot.position);
+    if (p.how !== 'rise') labelPos.y += p.pivot.position.y - p.baseY;
+    return { code: p.site ? codeAt(T) : PHASES[p.phase].code, name: p.info.name, dims: p.info.dims, mat: p.info.mat, pos: labelPos };
+  }
+
   if (opts.ghost) root.add(ghostRoot);
-  return { root, parts, update, tick, crane, trees, ground, ghostRoot, planWalls };
+  return { root, parts, update, tick, label, drawSign: site.drawSign, crane, trees, ground, ghostRoot, planWalls };
 }

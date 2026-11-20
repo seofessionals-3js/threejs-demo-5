@@ -32,6 +32,10 @@ Worauf es mir ankommt:
   die Fertigteile und später die Oberflächen darüber.
 - Die aktive Phase ist an beiden Stellen grün: Ihr Balken füllt sich, und das Teil, das
   gerade gesetzt wird, bekommt grüne Kanten.
+- Jedes Bauteil hat eine Bezeichnung, seine Maße und sein Material. Ein Schild mit
+  Hinweislinie zeigt sie am Teil, das gerade gesetzt wird, und unten in der Anzeige.
+- Die Baustelle ist belebt: Bagger, Lkw, Deckenstützen, Gerüst, Materiallager, ein Bauschild
+  und Maßstabsfiguren mit Helm kommen und gehen mit den Wochen.
 - Die Kamera hält während des Baus eine hohe Dreiviertelansicht, sodass sich das Gebäude
   bewegt. Ziehen am Diagramm spult ebenfalls, und ein Play-Button lässt den Bau ablaufen.
 - Nicht comichaft: [Beton, Travertin, Eiche, Nussbaum, Putz und Kies], im Code texturiert,

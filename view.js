@@ -173,7 +173,7 @@ const groundMat = DIR === 'b' ? groundMaterial({ color: 0xE9E9E4, map: drawSheet
   : DIR === 'c' ? groundMaterial({ color: 0xD3D2B6, contour: 0.08, mud: 1 })
   : groundMaterial({ color: 0xE2E0D3, contour: 0.2 });
 
-const house = buildHouse({ ghost: DIR === 'b', groundMat, groundUV: DIR === 'b' ? uvSheet : null });
+const house = buildHouse({ ghost: DIR === 'b', lawn: DIR !== 'b', groundMat, groundUV: DIR === 'b' ? uvSheet : null });
 scene.add(house.root);
 planWalls = house.planWalls;
 
@@ -419,6 +419,9 @@ function renderBar() {
   hudBar.querySelector('.wk-readout').textContent = `WO ${pad2(Math.floor(state.wk))}.${Math.floor((state.wk % 1) * 10)}`;
 }
 
+// the part in work, as three lines: what it is, how big, what it is made of
+const pieceHtml = p => `<span class="piece"><b>${esc(p.name)}</b><span class="dm">${esc(p.dims)}</span><span>${esc(p.mat)}</span></span>`;
+
 const roomTabs = (isInside, curStop) => `<div class="room-tabs" role="group" aria-label="Stationen des Rundgangs">${INTERIOR_STOPS.map(st => `<button class="room-tab ${isInside && curStop.id === st.id ? 'on' : ''}" data-room="${st.id}">${st.tab}</button>`).join('')}</div>`;
 
 // what is being built this week, as words
@@ -436,6 +439,7 @@ function renderRoomOrPhaseCard(T) {
   const isInside = state.shot === 'inside';
   const curStop = activeInteriorStop(state.tour);
   const tabsHtml = isInside || T >= 36.9 ? roomTabs(isInside, curStop) : '';
+  const piece = isInside ? null : house.label();
   if (isInside) {
     return `
       <div class="room-card">
@@ -450,7 +454,7 @@ function renderRoomOrPhaseCard(T) {
     <div class="room-card">
       <span class="lv">${N.code} // WO ${pad2(weekNo(T))} · ${Math.round(100 * T / WEEKS)}% FERTIG</span>
       <b>${N.title}</b>
-      <span class="nt">${N.spec}</span>
+      ${piece ? pieceHtml(piece) : `<span class="nt">${N.spec}</span>`}
       ${tabsHtml}
     </div>`;
 }
@@ -462,6 +466,7 @@ function renderHud() {
   const N = nowText(T);
   const curStop = activeInteriorStop(state.tour);
   const isInside = state.shot === 'inside';
+  const piece = isInside ? null : house.label();
   document.body.classList.toggle('open', state.dir === 'a' && state.open);
   renderBar();
 
@@ -506,9 +511,9 @@ function renderHud() {
             <div class="side-body">
               <span class="lv">${sideLv}</span>
               <b class="title">${sideTitle}</b>
-              <span class="spec-line">${sideSpec}</span>
+              ${piece ? pieceHtml(piece) : `<span class="spec-line">${sideSpec}</span>`}
             </div>
-            ${roomTabs(isInside, curStop)}
+            ${isInside || T >= 36.9 ? roomTabs(isInside, curStop) : ''}
           </div>
           <div class="chart"></div>
         </div>`;
@@ -543,7 +548,7 @@ function renderHud() {
             <div class="ph mono">
               ${state.shot === 'inside'
                 ? `<b>${curStop.title.toUpperCase()}</b><div class="sub">${curStop.spec}</div>`
-                : `${T >= WEEKS ? '<b>SCHLÜSSEL ÜBERGEBEN</b>' : `[${N.code}] <b>${N.names.join(' + ') || 'ÜBERGABE'}</b>`}<div class="sub">${N.spec}</div>`}
+                : `${T >= WEEKS ? '<b>SCHLÜSSEL ÜBERGEBEN</b>' : `[${N.code}] <b>${N.names.join(' + ') || 'ÜBERGABE'}</b>`}${piece ? pieceHtml(piece) : `<div class="sub">${N.spec}</div>`}`}
               ${inside || T >= 36.9 ? roomTabs(state.shot === 'inside', curStop) : ''}
             </div>
           </div>
@@ -555,7 +560,49 @@ function renderHud() {
     ch.innerHTML = programmeSVG(T, r.width, r.height, { compact: true, labelW: innerWidth < 760 ? 136 : 160 });
   }
   bindHudEvents();
-  if (SEQ.say) SEQ.say(isInside ? `${curStop.title}. ${curStop.spec}` : `Woche ${weekNo(T)} von ${WEEKS}, ${N.title}. ${N.spec}`);
+  if (SEQ.say) SEQ.say(isInside ? `${curStop.title}. ${curStop.spec}` : `Woche ${weekNo(T)} von ${WEEKS}, ${N.title}. ${piece ? `${piece.name}, ${piece.dims}, ${piece.mat}` : N.spec}`);
+  // the label at the part keeps clear of whatever is docked at the bottom
+  const dock = hudBody.querySelector('.prog:not(.full), .band, .room-card');
+  tagBottom = (dock ? dock.getBoundingClientRect().top : innerHeight) - 14;
+}
+
+// ------------------------------------------------------------------ the label at the part in work, with a leader to it
+const tag = document.createElement('div');
+tag.id = 'part-tag'; tag.setAttribute('aria-hidden', 'true');
+tag.innerHTML = '<svg><line></line><circle r="4"></circle></svg><div class="box"><span class="lv"></span><b></b><span class="dm"></span><span class="nt"></span></div>';
+document.body.appendChild(tag);
+const tagBox = tag.querySelector('.box'), tagLine = tag.querySelector('line'), tagDot = tag.querySelector('circle');
+const tagAt = { x: 0, y: 0, bx: 0, by: 0, on: false, key: '' }, tagV = new THREE.Vector3(), tagC = new THREE.Vector3();
+let tagBottom = innerHeight - 14;
+function updateTag(dt) {
+  // at eye level a wall is usually in the way, so the label is kept for the views from above
+  const info = (state.dir === 'a' && state.open) || state.shot === 'inside' || state.shot === 'path' ? null : house.label();
+  let ok = !!info;
+  if (ok) { tagV.copy(info.pos).project(camera); ok = tagV.z < 1 && Math.abs(tagV.x) < 1.02 && Math.abs(tagV.y) < 1.02; }
+  if (!ok) { if (tagAt.on) { tag.classList.remove('on'); tagAt.on = false; } return; }
+  const key = info.code + info.name + info.dims + info.mat;
+  if (key !== tagAt.key) {
+    tagAt.key = key;
+    const [lv, name, dm, nt] = tagBox.children;
+    lv.textContent = info.code; name.textContent = info.name; dm.textContent = info.dims; nt.textContent = info.mat;
+  }
+  const W = innerWidth, H = innerHeight, sx = (tagV.x * 0.5 + 0.5) * W, sy = (-tagV.y * 0.5 + 0.5) * H;
+  const bw = tagBox.offsetWidth, bh = tagBox.offsetHeight, top = W < 760 ? 196 : 104;
+  // beside the part, above it if there is room; never under the bars at the top or the dock at the bottom
+  tagC.set(...CENTER).project(camera);               // the label stands on the side away from the middle of the house
+  let bx = sx >= (tagC.x * 0.5 + 0.5) * W ? sx + 54 : sx - 54 - bw;
+  if (bx + bw > W - 18) bx = sx - 54 - bw;
+  bx = Math.max(18, Math.min(W - 18 - bw, bx));
+  let by = sy - bh - 46; if (by < top) by = sy + 46;
+  by = Math.max(top, Math.min(tagBottom - bh, by));
+  const k = !tagAt.on || prefs().calm ? 1 : Math.min(1, dt * 12);
+  tagAt.x += (sx - tagAt.x) * k; tagAt.y += (sy - tagAt.y) * k; tagAt.bx += (bx - tagAt.bx) * k; tagAt.by += (by - tagAt.by) * k;
+  tagBox.style.transform = `translate(${tagAt.bx.toFixed(1)}px, ${tagAt.by.toFixed(1)}px)`;
+  const lx = tagAt.bx + (tagAt.bx > tagAt.x ? 0 : bw), ly = Math.max(tagAt.by, Math.min(tagAt.by + bh, tagAt.y));
+  tagLine.setAttribute('x1', tagAt.x.toFixed(1)); tagLine.setAttribute('y1', tagAt.y.toFixed(1));
+  tagLine.setAttribute('x2', lx.toFixed(1)); tagLine.setAttribute('y2', (tagAt.by > tagAt.y ? tagAt.by : tagAt.by + bh < tagAt.y ? tagAt.by + bh : ly).toFixed(1));
+  tagDot.setAttribute('cx', tagAt.x.toFixed(1)); tagDot.setAttribute('cy', tagAt.y.toFixed(1));
+  if (!tagAt.on) { tag.classList.add('on'); tagAt.on = true; }
 }
 
 // ------------------------------------------------------------------ B: the sheet printed on the site (cached static base + fast dynamic overlay)
@@ -926,6 +973,7 @@ SEQ.onPrefs = () => { applyCamera(state.shot, 1); syncVisuals(1); };
 // ------------------------------------------------------------------ go
 try { await Promise.all([document.fonts.load(`700 12px Arimo`), document.fonts.load(`12px 'BBH Bogle'`)]); } catch (e) { /* the fallback faces will do */ }
 await document.fonts.ready;
+house.drawSign();   // the site board is lettered in the faces of the page
 if (DIR === 'b') {
   sheetBaseCanvas = null;
   drawSheet(state.wk);
@@ -962,6 +1010,7 @@ function loop(now = performance.now()) {
   }
 
   house.tick(dt, calm);
+  updateTag(dt);
   renderer.render(scene, camera);
   if (++frames === 4) window.__ready = true;
   requestAnimationFrame(loop);

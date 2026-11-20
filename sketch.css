@@ -236,6 +236,35 @@ a { color: inherit; }
 .room-tab.on { background: var(--lime); border-color: var(--lime); color: var(--ink); font-weight: 700; }
 .room-tab:focus-visible { outline-color: var(--lime); }
 
+/* ------------------------------------------------------------------ The label at the part in work: what it is, how big, what it is made of */
+#part-tag { position: fixed; inset: 0; z-index: 13; pointer-events: none; opacity: 0; transition: opacity 0.18s; }
+#part-tag.on { opacity: 1; }
+#part-tag svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#part-tag line { stroke: var(--ink); stroke-width: 1.3; }
+#part-tag circle { fill: var(--lime); stroke: var(--ink); stroke-width: 1.5; }
+#part-tag .box {
+  position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 3px;
+  min-width: 196px; max-width: 330px; padding: 9px 13px 8px;
+  background: rgba(var(--deep), 0.93); color: var(--paper); border-left: 3px solid var(--lime);
+  will-change: transform;
+}
+#part-tag .lv { font: 700 9px/1.2 var(--label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--lime); }
+#part-tag b { font: 700 13.5px/1.18 var(--label); letter-spacing: 0.02em; }
+#part-tag .dm { font: 600 11.5px/1.3 var(--label); letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
+#part-tag .nt { font: 500 10.5px/1.35 var(--label); letter-spacing: 0.03em; color: rgba(var(--paper-rgb), 0.84); }
+/* the same three lines in the card at the bottom */
+.piece { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(var(--paper-rgb), 0.18); text-transform: none; }
+.room-card .piece b, .prog .prog-side .piece b, .band .now .ph .piece b { font: 700 11.5px/1.2 var(--label); letter-spacing: 0.05em; text-transform: uppercase; color: var(--paper); }
+.piece span { font: 500 10.5px/1.35 var(--label); letter-spacing: 0.03em; color: rgba(var(--paper-rgb), 0.84); }
+.piece .dm { font-weight: 600; color: var(--lime); font-variant-numeric: tabular-nums; }
+body.large #part-tag b { font-size: 15.5px; }
+body.large #part-tag .dm, body.large #part-tag .nt, body.large .piece span { font-size: 12.5px; }
+body.large #part-tag .lv { font-size: 10.5px; }
+body.large .room-card .piece b, body.large .prog .prog-side .piece b, body.large .band .now .ph .piece b { font-size: 13px; }
+body.contrast #part-tag .box { background: rgb(var(--deep)); }
+body.contrast #part-tag .nt, body.contrast .piece span { color: var(--paper); }
+body.contrast #part-tag line { stroke-width: 2; }
+
 /* ------------------------------------------------------------------ A · The headline top left, the programme docked along the bottom */
 .prog-hero {
   position: absolute;

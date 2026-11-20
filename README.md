@@ -1,6 +1,6 @@
 # three.js Demo 5 · Projekt Steininger
 
-Der Bauzeitenplan von Projekt Steininger, angedockt am unteren Bildschirmrand, und darüber die Baustelle am Hang. Mit dem Mausrad bewegt sich die Heute-Linie durch 38 Wochen: Ein Bauzaun entsteht, der Hang wird ausgehoben, ein Turmdrehkran setzt jedes Wandelement, jede Deckenplatte und jede Scheibe, während sich der zugehörige Balken füllt. Dann kommen Travertin, Eichendielen, der Pool und die Möbel. Bei der Übergabe öffnet sich die Tür zum Hof, und Sie gehen durch das Wohngeschoss, die Treppe hinab ins Poolgeschoss und hinaus an den Pool. Scrollen Sie zurück, und das Haus baut sich wieder ab.
+Der Bauzeitenplan von Projekt Steininger, angedockt am unteren Bildschirmrand, und darüber die Baustelle am Hang. Mit dem Mausrad bewegt sich die Heute-Linie durch 38 Wochen: Ein Bauzaun entsteht, der Hang wird ausgehoben, ein Turmdrehkran setzt jedes Wandelement, jede Deckenplatte und jede Scheibe, während sich der zugehörige Balken füllt. Ein Schild am Bauteil nennt, was gerade gesetzt wird, mit Maßen und Material. Dann kommen Travertin, Eichendielen, der Pool und die Möbel. Bei der Übergabe öffnet sich die Tür zum Hof, und Sie gehen durch das Wohngeschoss, die Treppe hinab ins Poolgeschoss und hinaus an den Pool. Scrollen Sie zurück, und das Haus baut sich wieder ab.
 
 [**Live ansehen**](https://seofessionals-3js.github.io/threejs-demo-5/?dir=a) · [**Startprompt**](PROMPT.md) · [**Alle Demos**](https://seofessionals-3js.github.io/threejs-demos/)
 
@@ -14,8 +14,10 @@ Drei Varianten mit demselben Code: `?dir=a` der Bauzeitenplan (die Hauptdemo), `
 - **Jedes Teil kennt seine Phase.** `add(obj, phase, order, how)` platziert es innerhalb seines Phasenbalkens, und es kommt per Kran, wächst hoch, wächst nach oder erscheint. `update(week)` ist eine reine Funktion der Woche, deshalb funktioniert auch das Zurückscrollen.
 - **Das Haus ist eine Liste.** Wände, Decken und Dächer stehen als Zeilen mit Maßen in `house.js`. `wall()` teilt eine Wand in Fertigteile von etwa 3,30 m, `slab()` eine Decke in Streifen, und beide hängen die Oberflächen an, die später darüber kommen: Travertin außen, Putz und Eiche innen, Holz unter den Auskragungen.
 - **Aktiv ist grün.** Die aktive Phase füllt sich im Diagramm grün, und das Teil, das gerade gesetzt wird, bekommt grüne Kanten.
-- **Der Hang ist ein Netz.** `buildGround()` hebt die Baugrube aus und verfüllt sie wieder. Höhenlinien im Abstand von 50 cm lassen das Gelände wie einen Lageplan lesen.
-- **Der Kran** dreht seinen Ausleger zu dem Teil, das er gerade setzt, und fährt die Laufkatze darüber (`tick()` in `house.js`).
+- **Jedes Teil hat einen Namen.** Beim Anlegen bekommt jedes Bauteil eine Zeile mit Bezeichnung, Maßen und Material (`info` in `add()`). `label()` liefert das Teil, das gerade in Arbeit ist, und die Seite zeigt es als Schild mit Hinweislinie am Bauteil und in der Anzeige unten links.
+- **Die Baustelle lebt.** `site.js` stellt alles dazu, was nicht zum Haus gehört: Bagger, Kipper, Fahrmischer und Tieflader, Deckenstützen unter jeder Decke, das Fassadengerüst, Absturzsicherung, Materiallager, Bauschild und Figuren mit Helm, jedes mit den Wochen, in denen es da ist.
+- **Der Hang ist ein Netz.** `buildGround()` hebt die Baugrube aus und verfüllt sie wieder. Höhenlinien im Abstand von 50 cm lassen das Gelände wie einen Lageplan lesen. In den letzten Wochen wächst der Rasen vom Haus aus über den Hang.
+- **Der Kran** dreht seinen Ausleger zu dem Teil, das er gerade setzt, und fährt die Laufkatze darüber (`tick()` in `house.js`, das Fachwerk in `site.js`).
 - **Materialien im Code.** Beton, Travertin, Eiche, Nussbaum, Putz und Kies sind Canvas-Texturen mit maßstäblichen UVs. Die Daten zählen Arbeitstage.
 - **Der Rundgang innen** ist ein Catmull-Rom-Spline durch sechs Stationen.
 
@@ -28,7 +30,7 @@ Ebenen auf -3,20 (Poolgeschoss), 0,00 (Wohngeschoss) und +3,20 (Obergeschoss), D
 - **Abspielen** (oder `P`) lässt den Bau für Sie ablaufen. Mausrad, Berührung oder eine Pfeiltaste übernehmen wieder.
 - **Ansicht** öffnet die Optionen: Bewegung reduzieren (folgt auch der Systemeinstellung: kein Pendeln am Haken, kein Nachlauf, die Kamera springt), größere Beschriftung, höherer Kontrast (folgt auch der Systemeinstellung) und Sprünge zu zehn Kapiteln (Tasten `1` bis `0`). Die Auswahl wird im Browser gespeichert und gilt auch für Demo 4.
 - Die Pfeiltasten bewegen die Heute-Linie um eine halbe Woche, `Bild ↑` und `Bild ↓` um zwei Wochen, `Pos1` und `Ende` springen an den Anfang und vor die Haustür. Der Regler in der Leiste lässt sich mit der Tastatur bedienen.
-- Ein Screenreader bekommt eine Zusammenfassung der Bauphasen und eine gesprochene Zeile mit der aktuellen Woche oder dem Raum.
+- Ein Screenreader bekommt eine Zusammenfassung der Bauphasen und eine gesprochene Zeile mit der aktuellen Woche, dem Bauteil in Arbeit oder dem Raum.
 
 ## Farben und Schriften
 
@@ -36,7 +38,7 @@ Papier `#f1f0e6`, Waldgrün `#10241a`, Blattgrün `#5fa512`, Limette `#c4f03e`. 
 
 ## Dateien
 
-`index.html` (Seitensteuerung, Ansichtsoptionen, Zusammenfassung), `sketch.css` (Farben, Schriften, Layout), `view.js` (Kamera, Eingabe, HUD, das Gantt-Diagramm, der gedruckte Plan), `house.js` (Phasen, Gelände, Materialien, jedes Bauteil, der Kran), `access.js` (Abspielen, Ansichtsoptionen, Kapitel, Tasten, gesprochene Zeile).
+`index.html` (Seitensteuerung, Ansichtsoptionen, Zusammenfassung), `sketch.css` (Farben, Schriften, Layout), `view.js` (Kamera, Eingabe, HUD, das Gantt-Diagramm, der gedruckte Plan), `house.js` (Phasen, Gelände, Materialien, jedes Bauteil mit Bezeichnung, Maßen und Material), `site.js` (Kran, Maschinen, Stützen, Gerüst, Lager, Figuren, Bauschild), `access.js` (Abspielen, Ansichtsoptionen, Kapitel, Tasten, gesprochene Zeile).
 
 Parameter: `wk` (Woche 0 bis 38), `shot` (Kamera: `sig`, `a2`, `top`, `path`, `inside`), `room` (`entry`, `kitchen`, `living`, `stair`, `lounge`, `terrace`), `open` (nur der Plan).
 
