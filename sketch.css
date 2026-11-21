@@ -1,7 +1,7 @@
 /* Projekt Steininger: paper, forest green and lime. BBH Bogle for the headlines, Arimo for everything that is read.
    BBH Bogle has no umlauts, so anything that may carry one is set in Arimo. */
-@font-face { font-family: 'BBH Bogle'; src: url('fonts/BBHBogle-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: 'Arimo'; src: url('fonts/Arimo-VariableFont_wght.ttf') format('truetype'); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'BBH Bogle'; src: url('fonts/BBHBogle-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Arimo'; src: url('fonts/Arimo-VariableFont_wght.woff2') format('woff2'); font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
   --paper: #f1f0e6;
   --paper-2: #e6e5d6;
@@ -25,6 +25,7 @@ html, body {
   height: 100%; overflow: hidden;
   background: var(--paper); color: var(--ink);
   user-select: none; -webkit-user-select: none;
+  overscroll-behavior: none;   /* a swipe moves the weeks, it must not pull the page down to reload it */
 }
 body {
   font-family: var(--label);
@@ -32,7 +33,7 @@ body {
   -webkit-font-smoothing: antialiased; font-synthesis: none;
 }
 a { color: inherit; }
-#stage, #stage canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#stage, #stage canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
 
 .mono {
@@ -464,27 +465,111 @@ body.contrast #cad-hud .ch-c { border-color: var(--ink); }
   .room-card b { font-size: 18px; }
   .prog .prog-side { width: 280px; }
 }
+
+/* An upright phone. Three short rows at the top (name and controls, variant and week, the headline), the model
+   in the middle, the programme docked at the bottom with a card of fixed height, so the chart never changes size. */
 @media (max-width: 760px) {
-  :root { --gx: 14px; }
-  .bar { padding-top: 14px; }
+  :root { --gx: 10px; }
+  #cad-hud { inset: 4px; }
+  .bar { padding-top: 10px; }
+  .tools { gap: 6px; }
   .tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .tool, .cta { padding: 8px 9px 7px; font-size: 9.5px; }
-  .panel { top: 50px; left: var(--gx); width: auto; }
-  .cad-bar { top: 52px; left: var(--gx); overflow-x: auto; }
+  .tool, .cta { padding: 9px 10px 8px; font-size: 9.5px; min-height: 31px; }
+  .panel { top: 46px; left: var(--gx); width: auto; max-height: calc(100vh - 56px); }
+  .brand-badge { font-size: 11px; padding: 10px 9px 9px; letter-spacing: 0.08em; }
+  .brand-badge::after { content: ' ]'; }
+  .brand-badge.cam-badge::after { content: ' // REC ]'; font-size: 9.5px; }
+  .cad-bar { top: 47px; left: var(--gx); }
   .cad-bar .grp-lbl { display: none; }
-  .cad-scrub { flex: 1; }
-  .cad-scrub input[type="range"] { flex: 1; min-width: 60px; }
-  .prog-hero { top: 94px; max-width: calc(100vw - 2 * var(--gx)); }
-  .prog-hero h1 { font-size: clamp(20px, 6.6vw, 30px); }
+  .cad-bar .grp-scrub { flex: 1; min-width: 0; }
+  .cad-btn { padding: 10px 9px 9px; }
+  .cad-scrub { flex: 1; min-width: 0; padding: 0 8px; }
+  .cad-scrub input[type="range"] { flex: 1; min-width: 40px; width: auto; }
+  .cad-scrub input[type="range"]::-webkit-slider-thumb { width: 13px; height: 19px; }
+  .cad-scrub .wk-readout { min-width: 52px; }
+  .prog-hero { top: 10px; max-width: calc(100vw - 2 * var(--gx)); pointer-events: none; }
+  .prog-hero .top-row { margin-bottom: 0; }
+  .prog-hero h1 { font-size: clamp(17px, 5.7vw, 24px); margin: 49px 0 0; }
+  .prog-hero .meta { display: none; }
   .prog-hero .top-row .dwg-tag, .corner.tl .dwg-tag { display: none; }
-  .corner.tl, .cam .corner.tl { top: 14px; left: var(--gx); }
+  .corner.tl, .cam .corner.tl { top: 10px; left: var(--gx); }
   .cam .tl .stamp { display: none; }
-  .prog { left: 10px; right: 10px; bottom: 10px; flex-direction: column; height: 318px; gap: 10px; padding: 10px; }
-  .prog .prog-side { width: auto; padding: 10px 12px; }
-  .prog .prog-side .spec-line { display: none; }
-  .band { left: 10px; right: 10px; bottom: 10px; flex-direction: column; height: 300px; padding: 10px; }
-  .band .now { width: auto; margin: 0 0 10px; }
-  .band .now .ph .sub { display: none; }
-  .room-card { left: 10px; right: 10px; bottom: 10px; min-width: 0; max-width: none; }
+  .cam .frame { inset: 5px; }
+  .prog, .band { left: 8px; right: 8px; bottom: 8px; flex-direction: column; height: auto; gap: 8px; padding: 8px; }
+  .prog .prog-side, .band .now { width: auto; height: 98px; margin: 0; padding: 9px 12px 8px; overflow: hidden; justify-content: flex-start; gap: 5px; }
+  .prog .prog-side:has(.room-tabs), .band .now:has(.room-tabs) { height: 128px; }
+  .prog .prog-side .count, .band .now .wk { font-size: 23px; }
+  .prog .prog-side .side-body { margin-top: 0; gap: 3px; }
+  .prog .prog-side .title { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prog .prog-side .spec-line, .band .now .ph .sub { display: block; font-size: 9px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prog .prog-side .room-tabs, .band .now .room-tabs { margin-top: auto; flex-wrap: nowrap; gap: 3px; }
+  .prog .prog-side .room-tab, .band .now .room-tab { flex: 1 1 auto; padding: 6px 2px 5px; font-size: 7.5px; letter-spacing: 0.04em; text-align: center; white-space: nowrap; overflow: hidden; }
+  .prog .chart, .band .chart { flex: none; height: clamp(138px, 20vh, 186px); }
+  .band .now .ph { overflow: hidden; }
+  /* in the card the part in work is one line: its name and its size */
+  .piece { flex-direction: row; flex-wrap: nowrap; gap: 8px; margin-top: 1px; padding-top: 4px; align-items: baseline; white-space: nowrap; overflow: hidden; }
+  .piece span:not(.dm) { display: none; }
+  .room-card .piece b, .prog .prog-side .piece b, .band .now .ph .piece b { font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
+  .piece .dm { font-size: 10px; flex: none; }
+  .room-card { left: 8px; right: 8px; bottom: 8px; min-width: 0; max-width: none; padding: 10px 12px 9px; }
+  .room-card b { font-size: 16px; }
+  .room-card .room-tabs { flex-wrap: nowrap; gap: 3px; }
+  .room-card .room-tab { flex: 1 1 auto; padding: 6px 2px 5px; font-size: 7.5px; letter-spacing: 0.04em; text-align: center; white-space: nowrap; overflow: hidden; }
   .corner.br { display: none; }
+  /* the label at the part: a name on a short leader, the rest stands in the card below */
+  #part-tag .box { min-width: 0; max-width: 200px; padding: 6px 9px 5px; }
+  #part-tag .dm, #part-tag .nt { display: none; }
+  #part-tag b { font-size: 11.5px; }
+  #part-tag .lv { font-size: 8px; }
+  /* the open sheet */
+  .prog.full { padding: 12px 14px 16px; }
+  .prog.full .top { padding-bottom: 10px; padding-right: 132px; }
+  .prog.full h1 { font-size: clamp(34px, 11.5vw, 56px); margin: 18px 0 12px; }
+  .prog.full .meta { font-size: 9px; }
+  .prog.full .chart { margin-top: 14px; flex: 1; height: auto; }
+  .prog.full .foot { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .prog.full .foot .note { white-space: normal; line-height: 1.5; }
 }
+
+/* A phone on its side, or any low window: one row of controls, the model, a low dock. */
+@media (max-height: 520px) and (min-width: 761px) {
+  :root { --gx: 12px; }
+  #cad-hud { inset: 4px; }
+  .bar { padding-top: 10px; }
+  .tools { gap: 6px; }
+  .tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .tool, .cta { padding: 9px 10px 8px; font-size: 9.5px; }
+  .panel { top: 46px; max-height: calc(100vh - 56px); }
+  .brand-badge { font-size: 11px; padding: 10px 9px 9px; }
+  .cad-bar { top: 10px; right: 178px; }
+  .cad-bar .grp-lbl { display: none; }
+  .cad-scrub input[type="range"] { width: 90px; }
+  .prog-hero { top: 10px; }
+  .prog-hero .top-row { margin-bottom: 0; }
+  .prog-hero h1, .prog-hero .meta, .prog-hero .top-row .dwg-tag, .corner.tl .dwg-tag { display: none; }
+  .corner.tl, .cam .corner.tl { top: 10px; left: var(--gx); }
+  .cam .tl .stamp { display: none; }
+  .cam .frame { inset: 5px; }
+  .prog, .band { left: 8px; right: 8px; bottom: 8px; height: 158px; gap: 10px; padding: 8px 10px; }
+  .prog .prog-side, .band .now { width: 264px; margin: 0; padding: 8px 12px 7px; overflow: hidden; }
+  .prog .prog-side .count, .band .now .wk { font-size: 22px; }
+  .prog .prog-side .title { font-size: 14px; }
+  .prog .prog-side .spec-line, .band .now .ph .sub { display: none; }
+  .prog .prog-side .room-tab, .band .now .room-tab { padding: 4px 4px 3px; font-size: 7.5px; }
+  .piece span:not(.dm) { display: none; }
+  .room-card { left: 8px; bottom: 8px; padding: 8px 12px; }
+  .room-card b { font-size: 15px; }
+  .corner.br { display: none; }
+  #part-tag .box { min-width: 0; max-width: 220px; padding: 6px 9px 5px; }
+  #part-tag .nt { display: none; }
+  .prog.full { padding: 10px 16px 12px; }
+  .prog.full h1 { font-size: 30px; margin: 10px 0 8px; }
+  .prog.full h1 br { display: none; }
+  .prog.full .meta, .prog.full .foot { display: none; }
+  .prog.full .chart { margin-top: 8px; }
+}
+
+/* A phone: no blur behind the panel (it is recomputed over the 3D picture on every frame) */
+body.tier-low .panel { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgb(var(--deep)); }
+.panel { touch-action: pan-y; }
+.prog-hero, .room-card, .prog-side, .band .now, .cad-bar, .bar { touch-action: manipulation; }

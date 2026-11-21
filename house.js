@@ -33,6 +33,14 @@ export const C = {
   plant: 0x67784C, dark: 0x242321, machine: 0xDDA52E, cabin: 0xE4E2DA, mud: 0xD3C6B0, cloth: 0x2F6F3E,
 };
 
+// How finely things are cut and how rich the surfaces are, by the class of the device. buildHouse({ tier }) sets it.
+//   lumps: sphere segments of a foliage lump at detail 0 (far), 1 (small or mid distance), 2 (near)
+const QUAL = { low: false, bump: true, aniso: 8, grid: 0.3, lumps: [[10, 7], [14, 10], [20, 14]] };
+function setQuality(tier) {
+  if (tier === 'low') Object.assign(QUAL, { low: true, bump: false, aniso: 2, grid: 0.4, lumps: [[8, 5], [10, 7], [14, 10]] });
+  else if (tier === 'mid') Object.assign(QUAL, { low: false, bump: true, aniso: 4, grid: 0.34, lumps: [[8, 6], [12, 8], [16, 12]] });
+}
+
 const DAY = 864e5;
 // The programme counts working days: five a week, the last one is Friday 19 November.
 export const dateAt = w => {
@@ -95,18 +103,28 @@ export function groundAt(x, z, T) {
 
 // The ground material: paper, with contour lines every half metre so the slope reads like a site plan.
 // uMud tints the fenced site (the site camera uses it), uContour fades the contour lines.
-export function groundMaterial({ color = C.paper, map = null, contour = 0.2, mud = 0 } = {}) {
+// The excavation and the backfill are two numbers (uDig, uFill): every vertex carries its height on the natural
+// slope, in the open pit and on the finished grade, together with the slope of each, and the shader blends them.
+// A sheet printed on the ground (variant B) may carry a second, small texture for the part that changes (uDyn).
+export function groundMaterial({ color = C.paper, map = null, contour = 0.2, mud = 0, dyn = null, dynRect = null } = {}) {
   const m = new THREE.MeshStandardMaterial({ color, map, roughness: 0.96, envMapIntensity: 0.2 });
-  const U = m.userData.u = { uMud: { value: mud }, uMudCol: { value: new THREE.Color(C.mud) }, uEarth: { value: new THREE.Color(0xB9A283) }, uInk: { value: new THREE.Vector3(16 / 255, 36 / 255, 26 / 255) }, uContour: { value: contour },
-    uLawn: { value: 0 }, uLawnA: { value: new THREE.Color(0xA4B182) }, uLawnB: { value: new THREE.Color(0x96A575) } };
+  const U = m.userData.u = { uMud: { value: mud }, uMudCol: { value: new THREE.Color(C.mud) }, uEarth: { value: new THREE.Color(0xB9A283) }, uInk: { value: new THREE.Color(C.ink).convertLinearToSRGB() }, uContour: { value: contour },
+    uLawn: { value: 0 }, uLawnA: { value: new THREE.Color(0xA4B182) }, uLawnB: { value: new THREE.Color(0x96A575) },
+    uDig: { value: 0 }, uFill: { value: 0 }, uDyn: { value: dyn }, uDynRect: { value: new THREE.Vector4(...(dynRect || [0, 0, 1, 1])) } };
+  if (dyn) m.defines = { USE_DYN: '' };
   m.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, U);
     s.vertexShader = s.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aSite;\nattribute float aNat;\nvarying float vSite;\nvarying float vCut;\nvarying vec3 vWPos;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSite = aSite;\nvCut = aNat - position.y;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute float aSite;\nattribute vec3 aH;\nattribute vec4 aG;\nattribute vec2 aG0;\nuniform float uDig;\nuniform float uFill;\nvarying float vSite;\nvarying float vCut;\nvarying vec3 vWPos;')
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec2 gGrad = mix(mix(aG0, aG.xy, uDig), aG.zw, uFill);\nobjectNormal = normalize(vec3(-gGrad.x, 1.0, -gGrad.y));')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.y = mix(mix(aH.x, aH.y, uDig), aH.z, uFill);\nvSite = aSite;\nvCut = aH.x - transformed.y;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vSite;\nvarying float vCut;\nvarying vec3 vWPos;\nuniform float uMud;\nuniform vec3 uMudCol;\nuniform vec3 uEarth;\nuniform vec3 uInk;\nuniform float uContour;\nuniform float uLawn;\nuniform vec3 uLawnA;\nuniform vec3 uLawnB;')
+      .replace('#include <common>', '#include <common>\nvarying float vSite;\nvarying float vCut;\nvarying vec3 vWPos;\nuniform float uMud;\nuniform vec3 uMudCol;\nuniform vec3 uEarth;\nuniform vec3 uInk;\nuniform float uContour;\nuniform float uLawn;\nuniform vec3 uLawnA;\nuniform vec3 uLawnB;\n#ifdef USE_DYN\nuniform sampler2D uDyn;\nuniform vec4 uDynRect;\n#endif')
       .replace('#include <map_fragment>', `#include <map_fragment>
+        #ifdef USE_DYN
+          vec2 dq = (vWPos.xz - uDynRect.xy) / uDynRect.zw;
+          if (dq.x > 0.0 && dq.x < 1.0 && dq.y > 0.0 && dq.y < 1.0) { vec4 dc = texture2D(uDyn, vec2(dq.x, 1.0 - dq.y)); diffuseColor.rgb = mix(diffuseColor.rgb, dc.rgb * diffuse, dc.a); }
+        #endif
         diffuseColor.rgb = mix(diffuseColor.rgb, uMudCol, vSite * uMud);
         float cut = smoothstep(0.03, 0.35, vCut);
         diffuseColor.rgb = mix(diffuseColor.rgb, uEarth, cut);   // open earth wherever the ground has been dug
@@ -128,41 +146,52 @@ export function groundMaterial({ color = C.paper, map = null, contour = 0.2, mud
   return m;
 }
 
-// The ground as one mesh: a fine grid over the site that coarsens out to the horizon.
-// update(T) moves the vertices the excavation and the backfill touch. uv(x, z) maps the world to a sheet printed on it.
+// The ground as one mesh: a fine grid where the pit is dug, a wider one over the rest of the site, coarsening out
+// to the horizon. Nothing is moved on the CPU: update(T) sets how far the dig and the backfill have come.
+// uv(x, z) maps the world to a sheet printed on it.
 export function buildGround(material, { uv } = {}) {
-  const axis = (a, b, s) => {
+  const s = QUAL.grid;
+  // fine from a to b, twice as wide out to the fence (c, d), then growing to the horizon
+  const axis = (a, b, c, d) => {
     const out = [];
     for (let v = a; v < b + 1e-6; v += s) out.push(v);
-    for (let v = a, k = s; v > -520;) { k *= 1.22; v -= k; out.unshift(v); }
-    for (let v = out[out.length - 1], k = s; v < 520;) { k *= 1.22; v += k; out.push(v); }
+    for (let v = a; v > c + 1e-6;) { v -= s * 2; out.unshift(v); }
+    for (let v = out[out.length - 1]; v < d - 1e-6;) { v += s * 2; out.push(v); }
+    for (let v = out[0], k = s * 2; v > -520;) { k *= 1.24; v -= k; out.unshift(v); }
+    for (let v = out[out.length - 1], k = s * 2; v < 520;) { k *= 1.24; v += k; out.push(v); }
     return out;
   };
-  const xs = axis(-18, 42, 0.3), zs = axis(-24, 20.1, 0.3), W = xs.length, H = zs.length;
-  const pos = new Float32Array(W * H * 3), uvs = new Float32Array(W * H * 2), site = new Float32Array(W * H), nats = new Float32Array(W * H), idx = [], dyn = [];
+  const xs = axis(-2.6, 27.4, -18, 42), zs = axis(-14.6, 10.6, -24, 24), W = xs.length, H = zs.length, N = W * H;
+  const pos = new Float32Array(N * 3), uvs = new Float32Array(N * 2), site = new Float32Array(N), hs = new Float32Array(N * 3), gr = new Float32Array(N * 4), g0 = new Float32Array(N * 2), idx = new Uint32Array((W - 1) * (H - 1) * 6);
+  const pitF = (x, z) => Math.min(pitY(x, z), natural(x, z)), E = 0.12;
+  const grad = (f, x, z) => [(f(x + E, z) - f(x - E, z)) / (2 * E), (f(x, z + E) - f(x, z - E)) / (2 * E)];
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const k = j * W + i, x = xs[i], z = zs[j], nat = natural(x, z), pit = Math.min(pitY(x, z), nat), gr = gradeY(x, z);
-    pos[k * 3] = x; pos[k * 3 + 1] = nat; pos[k * 3 + 2] = z; nats[k] = nat;
+    const k = j * W + i, x = xs[i], z = zs[j], nat = natural(x, z), pit = Math.min(pitY(x, z), nat), grd = gradeY(x, z);
+    pos[k * 3] = x; pos[k * 3 + 1] = nat; pos[k * 3 + 2] = z;
+    hs[k * 3] = nat; hs[k * 3 + 1] = pit; hs[k * 3 + 2] = grd;
     const t = uv ? uv(x, z) : [x * 0.1, z * 0.1]; uvs[k * 2] = t[0]; uvs[k * 2 + 1] = t[1];
     site[k] = smooth(0, 1.5, Math.min(x - SITE.x0, SITE.x1 - x, z - SITE.z0, SITE.z1 - z));
-    if (pit < nat - 1e-3 || gr < nat - 1e-3) dyn.push(k, nat, pit, gr);
+    const far = Math.max(Math.abs(x - 12), Math.abs(z + 2)) > 60, gn = grad(natural, x, z);
+    const near = x > PIT.x0 - 6 && x < PIT.x1 + 10 && z > PIT.z0 - 6 && z < PIT.z1 + 6;
+    const gp = !far && near ? grad(pitF, x, z) : gn, gg = !far && near ? grad(gradeY, x, z) : gn;
+    g0[k * 2] = gn[0]; g0[k * 2 + 1] = gn[1]; gr[k * 4] = gp[0]; gr[k * 4 + 1] = gp[1]; gr[k * 4 + 2] = gg[0]; gr[k * 4 + 3] = gg[1];
   }
-  for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, d = a + W, c = d + 1; idx.push(a, d, b, b, d, c); }
+  let n = 0;
+  for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, d = a + W, c = d + 1; idx[n++] = a; idx[n++] = d; idx[n++] = b; idx[n++] = b; idx[n++] = d; idx[n++] = c; }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(N * 3).fill(0).map((v, q) => (q % 3 === 1 ? 1 : 0)), 3));
   g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   g.setAttribute('aSite', new THREE.BufferAttribute(site, 1));
-  g.setAttribute('aNat', new THREE.BufferAttribute(nats, 1));
-  g.setIndex(idx); g.computeVertexNormals();
+  g.setAttribute('aH', new THREE.BufferAttribute(hs, 3));
+  g.setAttribute('aG', new THREE.BufferAttribute(gr, 4));
+  g.setAttribute('aG0', new THREE.BufferAttribute(g0, 2));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
   const mesh = new THREE.Mesh(g, material);
   mesh.receiveShadow = true; mesh.frustumCulled = false;
-  let last = '';
+  const U = material.userData.u;
   function update(T) {
-    const e = easeOut(digAt(T)), f = smooth(FILL[0], FILL[1], T), key = e.toFixed(4) + f.toFixed(4);
-    if (key === last) return;
-    last = key;
-    for (let n = 0; n < dyn.length; n += 4) { const y = dyn[n + 1] + (dyn[n + 2] - dyn[n + 1]) * e; pos[dyn[n] * 3 + 1] = y + (dyn[n + 3] - y) * f; }
-    g.attributes.position.needsUpdate = true; g.computeVertexNormals();
+    U.uDig.value = easeOut(digAt(T)); U.uFill.value = smooth(FILL[0], FILL[1], T);
   }
   return { mesh, update };
 }
@@ -190,7 +219,7 @@ function getTextures() {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(rx, ry);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 8;
+    t.anisotropy = QUAL.aniso;
     return t;
   };
   const addGrain = (g, w, h, amp) => {
@@ -456,7 +485,8 @@ function applyMetricUV(geo, mode = 'box') {
 
 // A soft, lumpy crown for trees and shrubs
 function makeOrganicClusterGeo(rx, ry, rz, detail = 2) {
-  const g = new THREE.SphereGeometry(1, detail >= 2 ? 24 : 14, detail >= 2 ? 18 : 10);
+  const seg = QUAL.lumps[Math.max(0, Math.min(2, detail))];
+  const g = new THREE.SphereGeometry(1, seg[0], seg[1]);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
@@ -468,6 +498,7 @@ function makeOrganicClusterGeo(rx, ry, rz, detail = 2) {
 }
 
 export function buildHouse(opts = {}) {
+  setQuality(opts.tier);
   const root = new THREE.Group();
   const parts = [];
   const ghostRoot = new THREE.Group();
@@ -498,20 +529,224 @@ export function buildHouse(opts = {}) {
       case C.fabric: case C.linen: return { bumpMap: TX.fabricBump, bumpScale: 0.018, roughness: 0.88, envMapIntensity: 0.4 };
       case C.cloth: return { bumpMap: TX.fabricBump, bumpScale: 0.006, roughness: 0.96, envMapIntensity: 0.1 };
       case C.brass: return { roughness: 0.24, metalness: 0.88, envMapIntensity: 1.2 };
-      case C.leather: return { bumpMap: TX.plasterBump, bumpScale: 0.012, roughness: 0.42, envMapIntensity: 0.7 };
-      case C.terracotta: return { bumpMap: TX.plasterBump, bumpScale: 0.014, roughness: 0.74, envMapIntensity: 0.45 };
+      case C.leather: return { roughness: 0.42, envMapIntensity: 0.7 };
+      case C.terracotta: return { roughness: 0.74, envMapIntensity: 0.45 };
       case C.plant: return { bumpMap: TX.foliageBump, bumpScale: 0.024, roughness: 0.74, envMapIntensity: 0.4 };
-      case C.water: return { roughness: 0.06, metalness: 0.2, envMapIntensity: 1.6 };
+      case C.water: return { roughness: 0.06, metalness: 0.2, envMapIntensity: 1.6, own: true };
       case C.steel: return { roughness: 0.34, metalness: 0.76, envMapIntensity: 1.0 };
       case C.machine: return { roughness: 0.42, metalness: 0.2, envMapIntensity: 0.6 };
       case C.frame: case C.dark: return { roughness: 0.38, metalness: 0.55, envMapIntensity: 0.9 };
       default: return { roughness: 0.78, metalness: 0.04, envMapIntensity: 0.5 };
     }
   }
-  const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, ...tradeProps(color), ...o });
+
+  // ---------------------------------------------------------------- materials are shared, parts are baked
+  // The house is some 1 500 parts. Drawn one by one that is 1 300 draw calls, far too many for a phone. So a part is
+  // not an object any more: add() writes its triangles into one batch per material, each vertex carrying the weeks of
+  // its part (aT), the foot it grows from (aB) and how it arrives (aK). The vertex shader then lowers, raises, grows
+  // and removes every part from one number, the week (uT), and tints the part in work. What the programme has not
+  // reached yet is cut off with the draw range, because every batch is sorted by the week its parts arrive.
+  // Plain colours without a texture share three batches (plain, fabric, foliage), the colour sits in the vertices.
+  const U = { uT: { value: 0 }, uCalm: { value: 0 }, uHeatOn: { value: 1 }, uAccent: { value: accent }, uTint: { value: 0.24 }, uEdgeHot: { value: accent }, uEdgeAlpha: { value: 0.96 } };
+  const PART_PARS = `
+    attribute vec4 aT;   // from week, landed in week, leaves in week, weeks it takes to leave
+    attribute vec4 aB;   // the foot of the part, and how it arrives: 0 lowered, 1 rising, 2 growing, 3 simply there
+    attribute vec4 aK;   // height it is lowered from, hangs on the hook, tinted while in work, the week its phase ends
+    uniform float uT; uniform float uCalm; uniform float uHeatOn;
+    varying float vHeat;
+    float pEase(float s) { float k = 1.0 - s; return 1.0 - k * k * k; }
+    float pSm(float a, float b, float v) { float t = clamp((v - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }`;
+  const PART_BEGIN = `
+    float pS = clamp((uT - aT.x) / max(1e-4, aT.y - aT.x), 0.0, 1.0);
+    float pGone = uT > aT.z ? clamp((uT - aT.z) / aT.w, 0.0, 1.0) : 0.0;
+    float pE = pEase(pS);
+    vec3 pRel = transformed - aB.xyz;
+    if (aB.w < 0.5) {
+      // lowered on the hook: a little sway on the way down, a soft settle on landing
+      if (aK.y > 0.5 && pS < 1.0 && uCalm < 0.5) { float pa = sin(pS * 6.9115) * (1.0 - pE) * 0.03; float pc = cos(pa), pn = sin(pa); pRel.xy = vec2(pRel.x * pc - pRel.y * pn, pRel.x * pn + pRel.y * pc); }
+      float pSet = (uCalm < 0.5 && pS > 0.76 && pS < 1.0) ? sin(((pS - 0.76) / 0.24) * 7.853982) * exp(-(pS - 0.76) * 14.0) * 0.04 : 0.0;
+      pRel.y += (1.0 - pE) * aK.x + pSet;
+    } else if (aB.w < 1.5) { pRel.y *= max(0.001, pE); }
+    else if (aB.w < 2.5) { pRel *= max(0.001, pE); }
+    if (pGone > 0.0) pRel *= max(0.001, 1.0 - pEase(pGone));
+    transformed = aB.xyz + pRel;
+    float pHide = (pS <= 0.0 || pGone >= 1.0) ? 1.0 : 0.0;
+    vHeat = uHeatOn * (aK.z > 0.5 ? (pS < 1.0 ? 1.0 : 0.28 * (1.0 - pSm(aK.w - 0.6, aK.w, uT)) + 0.72 * (1.0 - pSm(aT.y, aT.y + 0.3, uT))) : 0.0);`;
+  const PART_END = '\n    if (pHide > 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);';
+  // kind: 'tex' a textured material of its own, 'fam' colour and gloss from the vertices, 'line' edges, 'depth' the shadow pass
+  function patchPart(m, kind) {
+    m.onBeforeCompile = (s) => {
+      Object.assign(s.uniforms, U);
+      s.vertexShader = s.vertexShader
+        .replace('#include <common>', '#include <common>' + PART_PARS + (kind === 'fam' ? '\nattribute vec2 aRM; varying vec2 vRM;' : ''))
+        .replace('#include <begin_vertex>', '#include <begin_vertex>' + PART_BEGIN + (kind === 'fam' ? '\nvRM = aRM;' : ''))
+        .replace('#include <project_vertex>', '#include <project_vertex>' + PART_END);
+      if (kind === 'depth') return;
+      const pars = '#include <common>\nvarying float vHeat;\nuniform vec3 uAccent; uniform float uTint; uniform vec3 uEdgeHot; uniform float uEdgeAlpha;' + (kind === 'fam' ? '\nvarying vec2 vRM;' : '');
+      s.fragmentShader = s.fragmentShader.replace('#include <common>', pars);
+      if (kind === 'tex') s.fragmentShader = s.fragmentShader.replace('#include <map_fragment>', 'diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, vHeat * uTint);\n#include <map_fragment>');
+      else if (kind === 'fam') s.fragmentShader = s.fragmentShader
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, uAccent, vHeat * uTint);')
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vRM.x;')
+        .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vRM.y;');
+      else s.fragmentShader = s.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, uEdgeHot, vHeat);\ndiffuseColor.a = mix(diffuseColor.a, uEdgeAlpha, vHeat);');
+    };
+    m.customProgramCacheKey = () => 'part-' + kind;
+    m.userData.part = kind;
+    return m;
+  }
+  const partDepth = patchPart(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'depth');
+  const bumpOf = (o) => (QUAL.bump ? o : (({ bumpMap, bumpScale, ...rest }) => rest)(o));
+  const famMat = {
+    plain: patchPart(new THREE.MeshStandardMaterial({ vertexColors: true, envMapIntensity: 0.75 }), 'fam'),
+    fabric: patchPart(new THREE.MeshStandardMaterial(bumpOf({ vertexColors: true, envMapIntensity: 0.4, bumpMap: TX.fabricBump, bumpScale: 0.018 })), 'fam'),
+    foliage: patchPart(new THREE.MeshStandardMaterial(bumpOf({ vertexColors: true, envMapIntensity: 0.4, bumpMap: TX.foliageBump, bumpScale: 0.024 })), 'fam'),
+  };
+  // one material per colour and set of options, however often it is asked for
+  const matCache = new Map();
+  const matKey = (color, o) => color + '|' + Object.keys(o).sort().map(k => k + ':' + (o[k] && o[k].isTexture ? o[k].uuid : o[k])).join(',');
+  function rawMat(color, o = {}) {
+    const { own, ...props } = { ...tradeProps(color), ...o };
+    const m = new THREE.MeshStandardMaterial({ color, ...bumpOf(props) });
+    const special = own || props.map || props.transparent || props.emissive || props.side != null;
+    m.userData.fam = special ? null : props.bumpMap === TX.fabricBump ? 'fabric' : props.bumpMap === TX.foliageBump ? 'foliage' : 'plain';
+    return m;
+  }
+  const mat = (color, o = {}) => { const k = matKey(color, o); let m = matCache.get(k); if (!m) matCache.set(k, m = rawMat(color, o)); return m; };
   const glassM = (o = {}) => mat(C.glass, { transparent: true, opacity: 0.3, roughness: 0.06, metalness: 0.15, envMapIntensity: 1.35, depthWrite: false, side: THREE.DoubleSide, ...o });
-  const glowM = () => new THREE.MeshStandardMaterial({ color: 0xfff3dc, emissive: 0xffcf8a, emissiveIntensity: 0, roughness: 0.4 });
-  const glows = [];
+  const glowMat = new THREE.MeshStandardMaterial({ color: 0xfff3dc, emissive: 0xffcf8a, emissiveIntensity: 0, roughness: 0.4 });   // every lamp shade: they all come on together
+  glowMat.userData.fam = null;
+  const glowM = () => glowMat;
+
+  // the batches: one per material, filled by add(), closed by finishBatches()
+  const batches = new Map(), lineBatch = { chunks: [] }, ghostChunks = [], liveMats = [];
+  const _v = new THREE.Vector3(), _n3 = new THREE.Matrix3();
+  function bakeMesh(c, p) {
+    const m = c.material, fam = m.userData.fam, key = fam || m.uuid;
+    let b = batches.get(key);
+    if (!b) batches.set(key, b = { fam, material: fam ? famMat[fam] : (m.userData.part ? m : patchPart(m, 'tex')), chunks: [], cast: false, receive: true, never: m.transparent || m === glowMat });
+    const g = c.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv, nv = pa.count;
+    const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), M = c.matrixWorld;
+    _n3.getNormalMatrix(M);
+    for (let i = 0; i < nv; i++) {
+      _v.fromBufferAttribute(pa, i).applyMatrix4(M); pos[i * 3] = _v.x; pos[i * 3 + 1] = _v.y; pos[i * 3 + 2] = _v.z;
+      if (na) { _v.fromBufferAttribute(na, i).applyMatrix3(_n3).normalize(); nrm[i * 3] = _v.x; nrm[i * 3 + 1] = _v.y; nrm[i * 3 + 2] = _v.z; }
+      if (ua) { uv[i * 2] = ua.getX(i); uv[i * 2 + 1] = ua.getY(i); }
+    }
+    b.chunks.push({ p, pos, nrm, uv, idx: g.index ? g.index.array : null, nv, ni: g.index ? g.index.count : nv, col: m.color, rough: m.roughness, metal: m.metalness });
+    if (c.castShadow && !b.never) b.cast = true;
+    if (!c.receiveShadow) b.receive = false;
+  }
+  function bakeLines(c, p, hot) {
+    const pa = c.geometry.attributes.position, nv = pa.count, pos = new Float32Array(nv * 3), M = c.matrixWorld;
+    for (let i = 0; i < nv; i++) { _v.fromBufferAttribute(pa, i).applyMatrix4(M); pos[i * 3] = _v.x; pos[i * 3 + 1] = _v.y; pos[i * 3 + 2] = _v.z; }
+    lineBatch.chunks.push({ p, pos, nv, col: c.material.color, alpha: c.material.opacity, hot });
+    return pos;
+  }
+  // the four numbers of a part, written to each of its vertices
+  function partAttrs(chunks, nv) {
+    const aT = new Float32Array(nv * 4), aB = new Float32Array(nv * 4), aK = new Float32Array(nv * 4);
+    let o = 0;
+    for (const c of chunks) {
+      const p = c.p, how = { drop: 0, rise: 1, grow: 2, show: 3 }[p.how] ?? 3, hot = (c.hot ?? p.hot) ? 1 : 0;
+      for (let i = 0; i < c.nv; i++, o += 4) {
+        aT[o] = p.t0; aT[o + 1] = p.t1; aT[o + 2] = Math.min(p.until, 1e6); aT[o + 3] = p.out;
+        aB[o] = p.base.x; aB[o + 1] = p.base.y; aB[o + 2] = p.base.z; aB[o + 3] = how;
+        aK[o] = p.drop; aK[o + 1] = p.lift ? 1 : 0; aK[o + 2] = hot; aK[o + 3] = PHASES[p.phase].w1;
+      }
+    }
+    return { aT: new THREE.BufferAttribute(aT, 4), aB: new THREE.BufferAttribute(aB, 4), aK: new THREE.BufferAttribute(aK, 4) };
+  }
+  const ranged = [];   // every batch, with the weeks its parts arrive in and the index each of them ends at
+  function finishBatches() {
+    for (const b of batches.values()) {
+      b.chunks.sort((x, y) => x.p.t0 - y.p.t0);
+      let nv = 0, ni = 0; for (const c of b.chunks) { nv += c.nv; ni += c.ni; }
+      const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+      const col = b.fam ? new Float32Array(nv * 3) : null, rm = b.fam ? new Float32Array(nv * 2) : null, t0s = [], ends = [];
+      let vo = 0, io = 0;
+      for (const c of b.chunks) {
+        pos.set(c.pos, vo * 3); nrm.set(c.nrm, vo * 3); uv.set(c.uv, vo * 2);
+        if (c.idx) for (let i = 0; i < c.ni; i++) idx[io + i] = c.idx[i] + vo; else for (let i = 0; i < c.ni; i++) idx[io + i] = vo + i;
+        if (col) for (let i = 0; i < c.nv; i++) { col[(vo + i) * 3] = c.col.r; col[(vo + i) * 3 + 1] = c.col.g; col[(vo + i) * 3 + 2] = c.col.b; rm[(vo + i) * 2] = c.rough; rm[(vo + i) * 2 + 1] = c.metal; }
+        vo += c.nv; io += c.ni; t0s.push(c.p.t0); ends.push(io);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      if (col) { g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aRM', new THREE.BufferAttribute(rm, 2)); }
+      const A = partAttrs(b.chunks, nv); g.setAttribute('aT', A.aT); g.setAttribute('aB', A.aB); g.setAttribute('aK', A.aK);
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      const mesh = new THREE.Mesh(g, b.material);
+      mesh.frustumCulled = false; mesh.castShadow = b.cast; mesh.receiveShadow = b.receive; mesh.customDepthMaterial = partDepth;
+      if (b.material.transparent) mesh.renderOrder = 2;
+      root.add(mesh); ranged.push({ mesh, g, t0s, ends, tris: ni / 3 }); b.chunks = null;
+    }
+    // every edge and every line of the parts: one object, the colour and the strength in the vertices
+    {
+      const L = lineBatch.chunks.sort((x, y) => x.p.t0 - y.p.t0);
+      let nv = 0; for (const c of L) nv += c.nv;
+      const pos = new Float32Array(nv * 3), col = new Float32Array(nv * 4), t0s = [], ends = [];
+      let vo = 0;
+      for (const c of L) {
+        pos.set(c.pos, vo * 3);
+        for (let i = 0; i < c.nv; i++) { const o = (vo + i) * 4; col[o] = c.col.r; col[o + 1] = c.col.g; col[o + 2] = c.col.b; col[o + 3] = c.alpha; }
+        vo += c.nv; t0s.push(c.p.t0); ends.push(vo);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 4));
+      const A = partAttrs(L, nv); g.setAttribute('aT', A.aT); g.setAttribute('aB', A.aB); g.setAttribute('aK', A.aK);
+      const m = patchPart(new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }), 'line');
+      const ls = new THREE.LineSegments(g, m); ls.frustumCulled = false; ls.renderOrder = 1;
+      root.add(ls); ranged.push({ mesh: ls, g, t0s, ends, tris: 0 }); lineBatch.chunks = null;
+    }
+    // B: the parts still to come, as dashed outlines on the sheet. Each one goes as its part arrives.
+    if (ghostChunks.length) {
+      let nv = 0; for (const c of ghostChunks) nv += c.nv;
+      const pos = new Float32Array(nv * 3), t0 = new Float32Array(nv);
+      let vo = 0;
+      for (const c of ghostChunks) { pos.set(c.pos, vo * 3); t0.fill(c.p.t0, vo, vo + c.nv); vo += c.nv; }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aT0', new THREE.BufferAttribute(t0, 1));
+      dash.onBeforeCompile = (s) => {
+        s.uniforms.uT = U.uT;
+        s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute float aT0; uniform float uT;').replace('#include <project_vertex>', '#include <project_vertex>\nif (uT > aT0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
+      };
+      const gl = new THREE.LineSegments(g, dash); gl.computeLineDistances(); gl.frustumCulled = false;
+      ghostRoot.add(gl);
+    }
+  }
+  // a group of plain coloured meshes that is not a part (the crane, a machine that moves): one mesh, the colours in the vertices
+  function flatten(group) {
+    group.updateMatrixWorld(true);
+    const chunks = [], keep = [], P = { t0: -1, t1: 0, until: Infinity, out: 1, how: 'show', base: V(0, 0, 0), drop: 0, lift: false, hot: false, phase: 0 };
+    let cast = false;
+    for (const c of [...group.children]) {
+      if (!c.isMesh || !c.material.userData.fam) { if (c.isMesh && c.material !== glowMat) c.material = c.material.clone(); keep.push(c); continue; }
+      const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+      g.applyMatrix4(c.matrixWorld);
+      chunks.push({ p: P, nv: g.attributes.position.count, g, col: c.material.color, rough: c.material.roughness, metal: c.material.metalness });
+      cast = cast || c.castShadow; group.remove(c);
+    }
+    if (!chunks.length) return group;
+    let nv = 0; for (const c of chunks) nv += c.nv;
+    const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), col = new Float32Array(nv * 3), rm = new Float32Array(nv * 2);
+    let vo = 0;
+    for (const c of chunks) {
+      pos.set(c.g.attributes.position.array, vo * 3); nrm.set(c.g.attributes.normal.array, vo * 3);
+      for (let i = 0; i < c.nv; i++) { col[(vo + i) * 3] = c.col.r; col[(vo + i) * 3 + 1] = c.col.g; col[(vo + i) * 3 + 2] = c.col.b; rm[(vo + i) * 2] = c.rough; rm[(vo + i) * 2 + 1] = c.metal; }
+      vo += c.nv;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(nv * 2), 2));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aRM', new THREE.BufferAttribute(rm, 2));
+    const A = partAttrs(chunks, nv); g.setAttribute('aT', A.aT); g.setAttribute('aB', A.aB); g.setAttribute('aK', A.aK);
+    const mesh = new THREE.Mesh(g, famMat.plain);
+    mesh.castShadow = cast; mesh.receiveShadow = true; mesh.customDepthMaterial = partDepth;
+    group.add(mesh);
+    return group;
+  }
+
+  const glows = [glowMat];
   function solid(geo, m, { edges = 28, cast = true, uvMode = 'box' } = {}) {
     if (uvMode) applyMetricUV(geo, uvMode);
     const g = new THREE.Group();
@@ -565,7 +800,6 @@ export function buildHouse(opts = {}) {
       const material = glow ? glowM() : glass ? glassM(m === 'cabGlass' ? { color: 0x8cb0bd, opacity: 0.34 } : {}) : typeof m === 'string' ? mat(MK[m] ?? C.plaster) : mat(m);
       const mesh = new THREE.Mesh(gs.length > 1 ? mergeGeometries(gs) : gs[0], material);
       mesh.castShadow = !glass && !glow; mesh.receiveShadow = !glow;
-      if (glow) glows.push(material);
       grp.add(mesh);
     }
     if (eg.length) grp.add(new THREE.LineSegments(eg.length > 1 ? mergeGeometries(eg) : eg[0], ink));
@@ -643,56 +877,56 @@ export function buildHouse(opts = {}) {
 
   // Register a part. how: 'drop' (craned in), 'rise' (grows up from its base),
   // 'grow' (scales from nothing), 'show' (just appears).
+  // Its triangles go into the batches; only a part that keeps moving on its own (o.live: a door leaf, the excavator
+  // that sinks with the pit) stays an object of its own.
   function add(obj, phase, order, how = 'drop', o = {}) {
     const ph = PHASES[phase], span = ph.w1 - ph.w0;
     const lifted = how === 'drop' && phase >= 3 && phase <= 7;
     const d = o.d ?? (lifted ? 0.36 : Math.min(0.8, span * 0.3));
     const t0 = o.at ?? (ph.w0 + clamp01(order) * (span - d));
-    const pivot = new THREE.Group();
-    root.add(pivot); pivot.add(obj);
+    obj.updateMatrixWorld(true);
     const bb = new THREE.Box3().setFromObject(obj);
     const base = o.base ? o.base.clone() : V((bb.min.x + bb.max.x) / 2, bb.min.y, (bb.min.z + bb.max.z) / 2);
-    pivot.position.copy(base);
-    obj.position.sub(base);
-    const mats = [];
-    const edgeMats = [];
-    obj.traverse(c => {
-      if (c.isMesh) {
-        const src = [c.material].flat(), own = src.map(m => m.clone());
-        src.forEach((m, i) => { const gi = glows.indexOf(m); if (gi >= 0) glows[gi] = own[i]; });   // a glowing shade keeps glowing
-        c.material = Array.isArray(c.material) ? own : own[0];
-        for (const m of own) { m.userData.base = m.color.clone(); mats.push(m); }
-      } else if (c.isLineSegments && c.material === ink && (o.hot ?? true)) {
-        c.material = ink.clone();
-        edgeMats.push(c.material);
-      }
-    });
-    const p = { pivot, obj, phase, t0, t1: t0 + d, how, until: o.until ?? Infinity, out: o.out ?? 0.5,
-      drop: o.h ?? 2.6, hot: o.hot ?? true, lift: o.lift ?? lifted,
-      mats, edgeMats, home: obj.position.clone(),
+    const p = { phase, t0, t1: t0 + d, how, until: o.until ?? Infinity, out: o.out ?? 0.5,
+      drop: o.h ?? 2.6, hot: o.hot ?? true, lift: o.lift ?? lifted, base,
       top: V((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2),
-      spanX: Math.max(0.4, (bb.max.x - bb.min.x) * 0.32), spanZ: Math.max(0.4, (bb.max.z - bb.min.z) * 0.32), s: 0,
+      spanX: Math.max(0.4, (bb.max.x - bb.min.x) * 0.32), spanZ: Math.max(0.4, (bb.max.z - bb.min.z) * 0.32), s: 0, vis: false, k: 1,
       site: !!o.site, baseY: base.y, info: o.info ? { name: o.info[0], mat: o.info[1] || '', dims: o.info[2] || sizeOf(bb) } : null };
-    if (opts.ghost && o.ghost !== false && phase >= 2) {
-      pivot.updateMatrixWorld(true);
+    const ghost = opts.ghost && o.ghost !== false && phase >= 2;
+    if (o.live) {
+      const pivot = new THREE.Group();
+      root.add(pivot); pivot.add(obj);
+      pivot.position.copy(base);
+      obj.position.sub(base);
+      const mats = [], edgeMats = [];
       obj.traverse(c => {
-        if (c.isLineSegments && (c.material === ink || edgeMats.includes(c.material))) {
-          const gl = new THREE.LineSegments(c.geometry.clone(), dash);
-          gl.applyMatrix4(c.matrixWorld);
-          gl.computeLineDistances();
-          ghostRoot.add(gl);
-          (p.ghosts ||= []).push(gl);
+        if (c.isMesh && c.material !== glowMat && c.material.userData.part !== 'fam') {
+          const own = c.material.clone(); own.userData.base = own.color.clone();   // the shared material is patched for the batches, a clone is plain again
+          c.material = own; liveMats.push(own); if (p.hot) mats.push(own);
+        } else if (c.isLineSegments && c.material === ink && p.hot) {
+          c.material = ink.clone();
+          edgeMats.push(c.material);
         }
+      });
+      Object.assign(p, { live: true, pivot, obj, mats, edgeMats, home: obj.position.clone() });
+      if (ghost) { pivot.updateMatrixWorld(true); obj.traverse(c => { if (c.isLineSegments) { const pa = c.geometry.attributes.position, pos = new Float32Array(pa.count * 3); for (let i = 0; i < pa.count; i++) { _v.fromBufferAttribute(pa, i).applyMatrix4(c.matrixWorld); pos[i * 3] = _v.x; pos[i * 3 + 1] = _v.y; pos[i * 3 + 2] = _v.z; } ghostChunks.push({ p, pos, nv: pa.count }); } }); }
+    } else {
+      obj.traverse(c => {
+        if (c.isMesh) bakeMesh(c, p);
+        else if (c.isLineSegments) { const pos = bakeLines(c, p, p.hot && c.material === ink); if (ghost && c.material === ink) ghostChunks.push({ p, pos, nv: pos.length / 3 }); }
       });
     }
     parts.push(p);
     return p;
   }
+  // how far a lowered part still hangs above its place, and how much of a rising or growing part is there
+  const settleOf = (s, calm) => (!calm && s > 0.76 && s < 1 ? Math.sin(((s - 0.76) / 0.24) * Math.PI * 2.5) * Math.exp(-(s - 0.76) * 14) * 0.04 : 0);
+  const hangOf = (p, calm) => (p.how === 'drop' ? (1 - easeOut(p.s)) * p.drop + settleOf(p.s, calm) : 0);
   // a lamp shade that glows at handover: its material is kept so update() can turn it up
-  const shade = (geo, x, y, z) => { const m = glowM(); glows.push(m); const s = new THREE.Mesh(geo, m); s.position.set(x, y, z); s.userData.glow = true; return s; };
+  const shade = (geo, x, y, z) => { const s = new THREE.Mesh(geo, glowM()); s.position.set(x, y, z); s.receiveShadow = false; return s; };
 
   // the crane, the machines, the falsework, the scaffold, the stores and the people (site.js)
-  const site = buildSite({ C, V, add, mat, ink, natural, glassM, PIT, TOWER });
+  const site = buildSite({ C, V, add, mat, ink, natural, glassM, flatten, PIT, TOWER, low: QUAL.low });
   const diggerPart = site.digger;
 
   // ---------------------------------------------------------------- 0 site set-up
@@ -770,7 +1004,7 @@ export function buildHouse(opts = {}) {
   // The ground itself is dug and filled in buildGround. Here: the excavator in the pit and the spoil heap on the court.
   const spoil = new THREE.Group();
   {
-    spoil.add(solid(makeOrganicClusterGeo(4.2, 1.75, 3.0, 2).translate(0, 0.7, 0), C.earth, { edges: 0 }));
+    spoil.add(solid(makeOrganicClusterGeo(4.2, 1.75, 3.0, 2).translate(0, 0.7, 0), rawMat(C.earth), { edges: 0 }));
     spoil.position.set(-5.2, 0, 9.6);
     root.add(spoil);
   }
@@ -952,7 +1186,7 @@ export function buildHouse(opts = {}) {
       [-0.009, 0.095, -D.w / 2 + 0.05, 0.009, D.h - 0.095, D.w / 2 - 0.05, 'glass', false],
     ]);
     const holder = new THREE.Group(); holder.add(leaf); holder.position.set(D.x, D.y, D.zc);
-    add(holder, 7, ord, 'drop', { h: 1.4, d: 0.26, base: V(D.x, D.y, D.zc), info: ['Schiebetür', 'Stahlrahmen, Isolierglas', `${fm(D.w)} × ${fm(D.h)} m`] });
+    add(holder, 7, ord, 'drop', { live: true, h: 1.4, d: 0.26, base: V(D.x, D.y, D.zc), info: ['Schiebetür', 'Stahlrahmen, Isolierglas', `${fm(D.w)} × ${fm(D.h)} m`] });
     return leaf;
   };
   const leaf1 = slider(DOOR, 0.3), leaf0 = slider(DOOR0, 0.02);
@@ -975,7 +1209,7 @@ export function buildHouse(opts = {}) {
   const courtDoor = boxGroup([[-0.05, 0, 0, 0.05, 2.4, 1.3, 'teak', true], [0.05, 0.95, 1.12, 0.08, 1.35, 1.15, 'brass', false], [-0.08, 0.95, 1.12, -0.05, 1.35, 1.15, 'brass', false]]);
   {
     const holder = new THREE.Group(); holder.add(courtDoor); holder.position.set(3.85, 0.02, 0.6);
-    add(holder, 8, 0.24, 'drop', { h: 0.8, d: 0.4, base: V(3.85, 0.02, 0.6), info: ['Hoftür', 'Teak, Griff aus Messing', '1,30 × 2,40 m'] });
+    add(holder, 8, 0.24, 'drop', { live: true, h: 0.8, d: 0.4, base: V(3.85, 0.02, 0.6), info: ['Hoftür', 'Teak, Griff aus Messing', '1,30 × 2,40 m'] });
   }
   const J = (info, phase, ord, fill) => { const L = []; fill((x0, y0, z0, x1, y1, z1, m, e = true) => L.push([x0, y0, z0, x1, y1, z1, m, e])); add(boxGroup(L), phase, ord, 'drop', { h: 0.7, d: 0.4, lift: false, info }); };
   // Upper level: walnut and travertine library on the north wall of the studio (x 8.0 to 13.5)
@@ -1174,7 +1408,7 @@ export function buildHouse(opts = {}) {
   {
     const cols = [0x67784C, 0x78875B, 0x8A9468], g = new THREE.Group();
     let n = 0;
-    const tuft = (x, y, z) => g.add(solid(makeOrganicClusterGeo(0.34, 0.2, 0.3, 1).translate(x, y + 0.1, z), mat(cols[n++ % 3], { bumpMap: TX.foliageBump, bumpScale: 0.024 }), { edges: 0 }));
+    const tuft = (x, y, z) => g.add(solid(makeOrganicClusterGeo(0.34, 0.2, 0.3, 0).translate(x, y + 0.1, z), mat(cols[n++ % 3], { bumpMap: TX.foliageBump, bumpScale: 0.024 }), { edges: 0 }));
     for (let z = -0.9; z <= 3.5; z += 0.72) tuft(15.75, 6.84, z);
     for (let z = -7.3; z <= -2.1; z += 0.72) tuft(19.6, 7.64, z);
     for (let x = 5.0; x <= 15.2; x += 0.78) tuft(x, 6.84, 3.3);
@@ -1182,9 +1416,9 @@ export function buildHouse(opts = {}) {
   }
 
   // ---------------------------------------------------------------- surroundings: cypresses along the court, olives down the slope
-  const trees = [];
+  const leafU = { uLeaf: { value: 0 } };
   {
-    const barkMat = mat(0x5D5246, { bumpMap: TX.woodBump, bumpScale: 0.022, roughness: 0.86 });
+    const BARK = new THREE.Color(0x5D5246);
     const hex = a => a.map(c => new THREE.Color(c));
     const springCols = hex([0x818C64, 0x76825A, 0x8C966E]), summerCols = hex([0x6D7E52, 0x5C6D42, 0x7F8E63]);
     const cypressCols = hex([0x55664A, 0x495A40, 0x60715A]), oliveCols = hex([0x74825E, 0x687653, 0x808E6A]);
@@ -1195,35 +1429,39 @@ export function buildHouse(opts = {}) {
       cypress: [[0, 2.3, 0, 0.8, 1.9, 0.8, 0], [0.04, 4.25, 0.03, 0.62, 1.7, 0.62, 1], [0, 6.0, -0.02, 0.36, 1.3, 0.36, 2]],
     };
     const barG = (a, b, r) => { const d = b.clone().sub(a), len = d.length(); return new THREE.BoxGeometry(r, len, r).translate(0, len / 2, 0).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), d.normalize())).translate(a.x, a.y, a.z); };
-    // one tree around its own foot: the bark, and the lumps of its crown sorted by colour
-    const treeGeo = (kind, k, near) => {
-      const th = kind === 'cypress' ? 1.2 : kind === 'olive' ? 2.4 : 3.1, bark = [new THREE.CylinderGeometry(0.11 * k, 0.22 * k, th * k, 10).translate(0, th * k / 2, 0)];
-      if (kind !== 'cypress') bark.push(barG(V(0, th * 0.68 * k, 0), V(-0.95 * k, (th + 0.5) * k, 0.5 * k), 0.11 * k), barG(V(0, th * 0.72 * k, 0), V(0.9 * k, (th + 0.6) * k, -0.45 * k), 0.1 * k), barG(V(0, th * 0.8 * k, 0), V(0.25 * k, (th + 1.1) * k, 0.7 * k), 0.09 * k));
-      const crown = [[], [], []];
-      for (const [cx, cy, cz, rx, ry, rz, ci] of SPEC[kind]) crown[ci].push(makeOrganicClusterGeo(rx * k, ry * k, rz * k, near ? 2 : 1).translate(cx * k, cy * k, cz * k));
+    // one tree around its own foot: the bark, and the lumps of its crown with their colour
+    const treeGeo = (kind, k, detail) => {
+      const th = kind === 'cypress' ? 1.2 : kind === 'olive' ? 2.4 : 3.1, bark = [new THREE.CylinderGeometry(0.11 * k, 0.22 * k, th * k, detail ? 8 : 5).translate(0, th * k / 2, 0)];
+      if (kind !== 'cypress' && detail) bark.push(barG(V(0, th * 0.68 * k, 0), V(-0.95 * k, (th + 0.5) * k, 0.5 * k), 0.11 * k), barG(V(0, th * 0.72 * k, 0), V(0.9 * k, (th + 0.6) * k, -0.45 * k), 0.1 * k), barG(V(0, th * 0.8 * k, 0), V(0.25 * k, (th + 1.1) * k, 0.7 * k), 0.09 * k));
+      const crown = SPEC[kind].map(([cx, cy, cz, rx, ry, rz, ci]) => ({ ci, g: makeOrganicClusterGeo(rx * k, ry * k, rz * k, detail).translate(cx * k, cy * k, cz * k) }));
       return { bark, crown };
     };
     const COLS = { round: [springCols, summerCols], olive: [oliveCols, oliveCols], cypress: [cypressCols, cypressCols] };
-    const leafM = c => new THREE.MeshStandardMaterial({ color: c.clone(), bumpMap: TX.foliageBump, bumpScale: 0.028, roughness: 0.76, envMapIntensity: 0.4 });
-    const shadowed = m => { m.castShadow = true; m.receiveShadow = true; return m; };
-    // The standing trees are merged into one mesh of bark and one mesh per kind and leaf colour: a handful of draw calls for the whole wood.
-    const forest = { bark: [], round: [[], [], []], olive: [[], [], []], cypress: [[], [], []] };
+    // The standing trees are two meshes: the ones near the house, which throw shadows on the site, and the wood
+    // further out. The colour of spring and of summer sits in every vertex, one number brings the leaves out.
+    const wood = { near: [], far: [] };
+    const paint = (g, spring, summer) => {
+      const n = g.attributes.position.count, c = new Float32Array(n * 3), c2 = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { c[i * 3] = spring.r; c[i * 3 + 1] = spring.g; c[i * 3 + 2] = spring.b; c2[i * 3] = summer.r; c2[i * 3 + 1] = summer.g; c2[i * 3 + 2] = summer.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.setAttribute('aSummer', new THREE.BufferAttribute(c2, 3));
+      return g;
+    };
     const tree = (kind, x, z, k, idx, wIn) => {
-      const y = natural(x, z) - 0.05, G = treeGeo(kind, k, Math.hypot(x - 12, z + 2) < 40);   // the far trees are cut more coarsely
+      const y = natural(x, z) - 0.05, dist = Math.hypot(x - 12, z + 2);
       if (wIn == null) {
+        const G = treeGeo(kind, k, dist < 27 ? 2 : dist < 58 ? 1 : 0), into = dist < 44 ? wood.near : wood.far;   // the far trees are cut more coarsely
         const place = g => g.rotateY(idx * 0.85).translate(x, y, z);
-        for (const g of G.bark) forest.bark.push(place(g));
-        G.crown.forEach((list, ci) => { for (const g of list) forest[kind][ci].push(place(g)); });
+        for (const g of G.bark) into.push(paint(place(g), BARK, BARK));
+        for (const { ci, g } of G.crown) into.push(paint(place(g), COLS[kind][0][ci], COLS[kind][1][ci]));
         return;
       }
-      // a tree planted during the build stands alone, so it can grow in
-      const t = new THREE.Group(), clusters = [];
-      t.add(shadowed(new THREE.Mesh(mergeGeometries(G.bark), barkMat)));
-      G.crown.forEach((list, ci) => { if (!list.length) return; const c = COLS[kind][1][ci], m = shadowed(new THREE.Mesh(mergeGeometries(list), leafM(c))); t.add(m); clusters.push({ mesh: m, spring: c, summer: c }); });
+      // a tree planted during the build is a part like any other, so it can grow in
+      const G = treeGeo(kind, k, 1), t = new THREE.Group();
+      const bark = new THREE.Mesh(mergeGeometries(G.bark), mat(0x5D5246, { roughness: 0.86 })); bark.castShadow = bark.receiveShadow = true; t.add(bark);
+      for (const { ci, g } of G.crown) { const m = new THREE.Mesh(g, mat(COLS[kind][1][ci].getHex(), { bumpMap: TX.foliageBump, bumpScale: 0.028, roughness: 0.76 })); m.castShadow = m.receiveShadow = true; t.add(m); }
       t.position.set(x, y, z); t.rotation.y = idx * 0.85;
       const h = new THREE.Group(); h.add(t);
       add(h, 9, wIn, 'grow', { d: 0.5, hot: false, ghost: false, base: V(x, y, z), info: [kind === 'olive' ? 'Olivenbaum' : 'Laubbaum', 'Hochstamm mit Ballen', `Höhe ${fm((kind === 'olive' ? 4.5 : 6.1) * k)} m`] });
-      trees.push({ clusters, summer: true });
     };
     let n = 0;
     for (let z = -22; z <= 15; z += 3.5) tree('cypress', -15 + Math.sin(z) * 0.6, z + (rnd() - 0.5), 0.85 + rnd() * 0.35, n++);
@@ -1232,11 +1470,15 @@ export function buildHouse(opts = {}) {
       ['round', -20, 24, 1.2], ['olive', 24, 24, 1.1], ['round', 44, -34, 1.4], ['cypress', 34, -19, 1.1], ['cypress', 35.6, -17.6, 0.9], ['cypress', -9, 21, 1.0]]) tree(kind, x, z, k, n++);
     // the garden, planted in the last weeks: olives either side of the pool and below it
     for (const [kind, x, z, k, w] of [['olive', 24.6, -11.6, 0.9, 0.36], ['olive', 31.6, -9.6, 0.95, 0.38], ['round', 33.8, -2.2, 0.8, 0.4], ['olive', 15.2, 8.4, 0.85, 0.42], ['olive', -9.2, 8.8, 0.8, 0.43]]) tree(kind, x, z, k, n++, w);
-    root.add(shadowed(new THREE.Mesh(mergeGeometries(forest.bark), barkMat)));
-    for (const kind of ['round', 'olive', 'cypress']) {
-      const clusters = [];
-      forest[kind].forEach((list, ci) => { if (!list.length) return; const m = shadowed(new THREE.Mesh(mergeGeometries(list), leafM(COLS[kind][0][ci]))); root.add(m); clusters.push({ mesh: m, spring: COLS[kind][0][ci], summer: COLS[kind][1][ci] }); });
-      trees.push({ clusters });
+    const woodMat = new THREE.MeshStandardMaterial(bumpOf({ vertexColors: true, bumpMap: TX.foliageBump, bumpScale: 0.028, roughness: 0.78, envMapIntensity: 0.4 }));
+    woodMat.onBeforeCompile = (s) => {
+      Object.assign(s.uniforms, leafU);
+      s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aSummer; uniform float uLeaf;').replace('#include <color_vertex>', '#include <color_vertex>\nvColor.rgb = mix(color.rgb, aSummer, uLeaf);');
+    };
+    for (const [list, cast] of [[wood.near, true], [wood.far, false]]) {
+      if (!list.length) continue;
+      const m = new THREE.Mesh(mergeGeometries(list.map(g => (g.index ? g.toNonIndexed() : g))), woodMat);
+      m.castShadow = cast; m.receiveShadow = true; m.frustumCulled = false; root.add(m);
     }
   }
   // shrubs in soft mounds round the house, rosemary and lavender banks either side of the pool
@@ -1244,7 +1486,7 @@ export function buildHouse(opts = {}) {
     const cols = [0x67784C, 0x56673D, 0x78875B, 0x8A86A0];
     const mound = (x, z, s, ci, lumps) => {
       const g = new THREE.Group(), y = natural(x, z);
-      for (const [mx, my, mz, rx, ry, rz] of lumps) g.add(solid(makeOrganicClusterGeo(rx * s, ry * s, rz * s, 2).translate(x + mx * s, y + my * s, z + mz * s), mat(cols[(ci++) % cols.length], { bumpMap: TX.foliageBump, bumpScale: 0.025, roughness: 0.74 }), { edges: 0 }));
+      for (const [mx, my, mz, rx, ry, rz] of lumps) g.add(solid(makeOrganicClusterGeo(rx * s, ry * s, rz * s, 1).translate(x + mx * s, y + my * s, z + mz * s), mat(cols[(ci++) % cols.length], { bumpMap: TX.foliageBump, bumpScale: 0.025, roughness: 0.74 }), { edges: 0 }));
       return g;
     };
     const SHRUB = [[0, 0.38, 0, 0.65, 0.44, 0.58], [-0.35, 0.28, 0.18, 0.46, 0.34, 0.42], [0.32, 0.26, -0.15, 0.42, 0.32, 0.38]];
@@ -1264,17 +1506,20 @@ export function buildHouse(opts = {}) {
   // the lake in the valley, the long water the house looks out on
   {
     const lake = new THREE.Mesh(new THREE.PlaneGeometry(900, 1600).rotateX(-Math.PI / 2).translate(560, -19.3, 0), new THREE.MeshStandardMaterial({ color: 0x9FBEC6, roughness: 0.18, metalness: 0.1, envMapIntensity: 1.1 }));
-    lake.receiveShadow = false; root.add(lake);
+    lake.receiveShadow = false; root.add(lake); liveMats.push(lake.material);
   }
 
   // ---------------------------------------------------------------- warm light at handover
   const warm = [[0xffdca8, 12, [12.5, 2.3, -5.2]], [0xffdca8, 11, [11, 2.3, 1.4]], [0xffdca8, 11, [13.4, -0.9, -5.2]], [0xffdca8, 11, [11, 5.6, -3.2]], [0xffb070, 8, [5.6, -1.4, 2.3]]]
-    .map(([c, dist, p]) => { const l = new THREE.PointLight(c, 0, dist, 1.5); l.position.set(...p); root.add(l); return l; });
+    .slice(0, QUAL.low ? 0 : 5).map(([c, dist, p]) => { const l = new THREE.PointLight(c, 0, dist, 1.5); l.position.set(...p); root.add(l); return l; });
 
   // ---------------------------------------------------------------- the tower crane
   // It stands on the court, west of the house. Its jib turns to whatever is being set, the trolley runs out over it.
   const crane = new THREE.Group(), jib = new THREE.Group(), trolley = new THREE.Group();
-  const cable = lines([V(), V(), V(), V(), V(), V()], new THREE.LineBasicMaterial({ color: C.ink }));
+  const cablePos = new Float32Array(18), cableGeo = new THREE.BufferGeometry();
+  cableGeo.setAttribute('position', new THREE.BufferAttribute(cablePos, 3));
+  const cable = new THREE.LineSegments(cableGeo, new THREE.LineBasicMaterial({ color: C.ink }));
+  cable.frustumCulled = false;
   const JY = TOWER.h + 0.7;
   const CR = site.crane(), hookBlock = CR.hook;
   crane.add(CR.mast);
@@ -1287,60 +1532,71 @@ export function buildHouse(opts = {}) {
   // where the crane wants to be (set by update) and where it is (eased by tick)
   const want = { yaw: 0, r: 14, hook: V(TOWER.x, JY - 6, TOWER.z), sling: null };   // parked along the slope, clear of the pit
   const now = { yaw: 0, r: 14 };
-  const trolleyAt = V();
+  const trolleyAt = V(), swivel = V(), slA = V(), slB = V();
+  // eases the jib and the trolley towards the part on the hook. Returns true while anything still moves,
+  // so the page knows whether a new frame (and a new shadow) is needed.
   function tick(dt = 0.016, snap = false) {
-    if (!crane.visible) return;
+    if (!crane.visible) return false;
     const k = snap ? 1 : Math.min(1, dt * 4.2);
     let dy = want.yaw - now.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    now.yaw += dy * k; now.r += (want.r - now.r) * k;
+    const dr = want.r - now.r, moving = Math.abs(dy) > 2e-4 || Math.abs(dr) > 2e-3;
+    now.yaw += dy * k; now.r += dr * k;
     jib.rotation.y = now.yaw; trolley.position.z = now.r;
     trolley.updateWorldMatrix(true, false); trolleyAt.setFromMatrixPosition(trolley.matrixWorld); trolleyAt.y -= 0.5;
-    const s = want.sling, swivel = s ? want.hook.clone().add(V(0, 1.15, 0)) : V(trolleyAt.x, Math.min(trolleyAt.y - 1, want.hook.y), trolleyAt.z);
-    const a = s ? want.hook.clone().add(V(-s[0] * 0.5, -0.02, -s[1] * 0.35)) : swivel, b = s ? want.hook.clone().add(V(s[0] * 0.5, -0.02, s[1] * 0.35)) : swivel;
-    cable.geometry.setFromPoints([trolleyAt, swivel, swivel, a, swivel, b]);
+    const s = want.sling;
+    if (s) { swivel.copy(want.hook); swivel.y += 1.15; slA.copy(want.hook); slA.x -= s[0] * 0.5; slA.y -= 0.02; slA.z -= s[1] * 0.35; slB.copy(want.hook); slB.x += s[0] * 0.5; slB.y -= 0.02; slB.z += s[1] * 0.35; }
+    else { swivel.set(trolleyAt.x, Math.min(trolleyAt.y - 1, want.hook.y), trolleyAt.z); slA.copy(swivel); slB.copy(swivel); }
+    trolleyAt.toArray(cablePos, 0); swivel.toArray(cablePos, 3); swivel.toArray(cablePos, 6); slA.toArray(cablePos, 9); swivel.toArray(cablePos, 12); slB.toArray(cablePos, 15);
+    cableGeo.attributes.position.needsUpdate = true;
     hookBlock.position.copy(swivel);
+    return moving;
   }
 
+  finishBatches();
+  let totalTris = 0; for (const r of ranged) totalTris += r.tris;
+
   const hookAt = new THREE.Vector3();
-  let lastT = 0;
+  let lastT = 0, lastCalm = false;
   function update(T, o = {}) {
     lastT = T;
     let active = null;
-    const calm = !!o.calm;
+    const calm = lastCalm = !!o.calm;
+    U.uT.value = T; U.uCalm.value = calm ? 1 : 0; U.uHeatOn.value = T >= WEEKS ? 0 : 1;
+    // what the programme has not reached yet is not drawn at all
+    for (const r of ranged) {
+      let lo = 0, hi = r.t0s.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (r.t0s[m] < T) lo = m + 1; else hi = m; }
+      const n = lo ? r.ends[lo - 1] : 0;
+      r.g.setDrawRange(0, n); r.mesh.visible = n > 0;
+    }
     for (const p of parts) {
       const s = clamp01((T - p.t0) / (p.t1 - p.t0));
       const gone = T > p.until ? clamp01((T - p.until) / p.out) : 0;
-      p.s = s;
-      p.pivot.visible = s > 0 && gone < 1;
-      if (!p.pivot.visible) { if (p.ghosts) for (const g of p.ghosts) g.visible = (o.ghost ?? 0) > 0 && s <= 0; continue; }
-      const e = easeOut(s);
-      p.pivot.scale.set(1, 1, 1);
-      p.obj.position.copy(p.home);
-      p.obj.rotation.set(0, 0, 0);
-      if (p.how === 'drop') {
-        // lowered on the hook: a little sway on the way down, a soft settle on landing
-        const settle = !calm && s > 0.76 && s < 1 ? Math.sin(((s - 0.76) / 0.24) * Math.PI * 2.5) * Math.exp(-(s - 0.76) * 14) * 0.04 : 0;
-        p.obj.position.y += (1 - e) * p.drop + settle;
-        if (p.lift && s < 1 && !calm) p.obj.rotation.z = Math.sin(s * Math.PI * 2.2) * (1 - e) * 0.018;
-      } else if (p.how === 'rise') {
-        p.pivot.scale.y = Math.max(1e-3, e);
-      } else if (p.how === 'grow') {
-        p.pivot.scale.setScalar(Math.max(1e-3, e));
+      p.s = s; p.vis = s > 0 && gone < 1;
+      p.k = gone > 0 ? Math.max(1e-3, 1 - easeOut(gone)) : 1;
+      if (p.live) {
+        // a part that stays an object: the same motion as in the vertex shader, on its pivot
+        p.pivot.visible = p.vis;
+        if (p.vis) {
+          const e = easeOut(s);
+          p.pivot.scale.set(1, 1, 1);
+          p.obj.position.copy(p.home);
+          p.obj.rotation.set(0, 0, 0);
+          if (p.how === 'drop') p.obj.position.y += hangOf(p, calm);
+          else if (p.how === 'rise') p.pivot.scale.y = Math.max(1e-3, e);
+          else if (p.how === 'grow') p.pivot.scale.setScalar(Math.max(1e-3, e));
+          if (gone > 0) p.pivot.scale.multiplyScalar(p.k);
+          const ph = PHASES[p.phase];
+          const heat = p.hot ? (s < 1 ? 1 : 0.28 * (1 - smooth(ph.w1 - 0.6, ph.w1, T)) + 0.72 * (1 - smooth(p.t1, p.t1 + 0.3, T))) : 0;
+          const effHeat = T >= WEEKS ? 0 : heat;
+          for (const m of p.mats) m.color.copy(m.userData.base).lerp(U.uAccent.value, effHeat * U.uTint.value);
+          for (const em of p.edgeMats) { em.color.copy(inkCol).lerp(U.uEdgeHot.value, effHeat); em.opacity = 0.34 + (U.uEdgeAlpha.value - 0.34) * effHeat; }
+        }
       }
-      if (gone > 0) p.pivot.scale.multiplyScalar(Math.max(1e-3, 1 - easeOut(gone)));
-      const ph = PHASES[p.phase];
-      const heat = p.hot ? (s < 1 ? 1 : 0.28 * (1 - smooth(ph.w1 - 0.6, ph.w1, T)) + 0.72 * (1 - smooth(p.t1, p.t1 + 0.3, T))) : 0;
-      const effHeat = T >= WEEKS ? 0 : heat;
-      // the part in work keeps its material, with a green tint and green edges
-      for (const m of p.mats) m.color.copy(m.userData.base).lerp(accent, effHeat * 0.24);
-      for (const em of p.edgeMats) {
-        em.color.copy(inkCol).lerp(accent, effHeat);
-        em.opacity = 0.34 + 0.62 * effHeat;
-      }
-      if (p.ghosts) for (const g of p.ghosts) g.visible = false;
-      if (p.lift && s > 0 && s < 1 && (!active || p.t0 > active.t0)) active = p;
+      if (p.vis && p.lift && s > 0 && s < 1 && (!active || p.t0 > active.t0)) active = p;
     }
     dash.opacity = 0.45 * (o.ghost ?? 0);
+    ghostRoot.visible = (o.ghost ?? 0) > 0.001;
 
     // the doors open for handover: the door to the court swings in, the two glass leaves slide aside
     courtDoor.rotation.y = easeOut(smooth(36.85, 37.15, T)) * 1.42;
@@ -1353,14 +1609,14 @@ export function buildHouse(opts = {}) {
     const dig = digAt(T), heap = dig * (1 - smooth(FILL[0], FILL[1], T));
     spoil.visible = heap > 0.01;
     spoil.scale.set(0.4 + 0.6 * heap, Math.max(1e-3, heap), 0.4 + 0.6 * heap);
-    if (diggerPart.pivot.visible) diggerPart.pivot.position.y = groundAt(11.6, -2.2, T);
+    if (diggerPart.vis) diggerPart.pivot.position.y = groundAt(11.6, -2.2, T);
 
     // Crane: goes up while the slab cures, comes down once the glass is in.
     const cr = craneAt(T);
     crane.visible = cable.visible = hookBlock.visible = cr > 0.01;
     crane.scale.y = Math.max(1e-3, easeOut(cr));
     if (active && cr >= 1) {
-      hookAt.copy(active.top); hookAt.y += active.obj.position.y - active.home.y + 0.05;
+      hookAt.copy(active.top); hookAt.y += hangOf(active, calm) + 0.05;
       want.hook.copy(hookAt); want.sling = [active.spanX, active.spanZ];
       want.yaw = Math.atan2(hookAt.x - TOWER.x, hookAt.z - TOWER.z);
       want.r = Math.min(TOWER.jib - 1, Math.max(3, Math.hypot(hookAt.x - TOWER.x, hookAt.z - TOWER.z)));
@@ -1376,10 +1632,7 @@ export function buildHouse(opts = {}) {
     for (const m of glows) m.emissiveIntensity = 1.6 * glow;
 
     // the trees come into leaf between March and June
-    const leaf = smooth(2, 12, T);
-    for (const tr of trees) {
-      for (const cl of tr.clusters) cl.mesh.material.color.copy(cl.spring).lerp(cl.summer, tr.summer ? 1 : leaf);
-    }
+    leafU.uLeaf.value = smooth(2, 12, T);
     return active;
   }
 
@@ -1391,7 +1644,7 @@ export function buildHouse(opts = {}) {
     const T = lastT;
     let moving = null, landed = null;
     for (const p of parts) {
-      if (!p.info || !p.pivot.visible || T > p.until) continue;
+      if (!p.info || !p.vis || T > p.until) continue;
       if (T >= p.t0 && T < p.t1) { if (!moving || p.t0 > moving.t0) moving = p; }
       else if (T >= p.t1 && T < p.t1 + 0.25) { if (!landed || p.t1 > landed.t1) landed = p; }
     }
@@ -1403,14 +1656,19 @@ export function buildHouse(opts = {}) {
     }
     const p = moving || landed;
     if (!p) return null;
+    // the top of the part, moved the way its vertices are moved
+    const e = easeOut(p.s);
     labelPos.copy(p.top);
-    if (p.how === 'drop') labelPos.y += p.obj.position.y - p.home.y;
-    else if (p.how === 'rise') labelPos.y = p.pivot.position.y + (p.top.y - p.baseY) * p.pivot.scale.y;
-    else if (p.how === 'grow') labelPos.sub(p.pivot.position).multiplyScalar(p.pivot.scale.x).add(p.pivot.position);
-    if (p.how !== 'rise') labelPos.y += p.pivot.position.y - p.baseY;
+    if (p.how === 'drop') labelPos.y += hangOf(p, lastCalm);
+    else if (p.how === 'rise') labelPos.y = p.baseY + (p.top.y - p.baseY) * Math.max(1e-3, e);
+    else if (p.how === 'grow') labelPos.sub(p.base).multiplyScalar(Math.max(1e-3, e)).add(p.base);
+    if (p.live && p.how !== 'rise') labelPos.y += p.pivot.position.y - p.baseY;
     return { code: p.site ? codeAt(T) : PHASES[p.phase].code, name: p.info.name, dims: p.info.dims, mat: p.info.mat, pos: labelPos };
   }
 
   if (opts.ghost) root.add(ghostRoot);
-  return { root, parts, update, tick, label, drawSign: site.drawSign, crane, trees, ground, ghostRoot, planWalls };
+  // the materials that show a reflection: glass, water, metal. A phone gives only these the environment map.
+  const shiny = m => m.roughness < 0.2 || m.metalness > 0.5;
+  const envMaterials = [famMat.plain, ...[...matCache.values(), ...liveMats].filter(shiny)];
+  return { root, parts, update, tick, label, envMaterials, drawSign: site.drawSign, crane, ground, ghostRoot, planWalls, stats: { parts: parts.length, batches: ranged.length, tris: totalTris }, look: U };
 }

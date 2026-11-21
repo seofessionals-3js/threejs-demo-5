@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function buildSite(K) {
-  const { C, V, add, mat, ink, natural, glassM, PIT, TOWER } = K;
+  const { C, V, add, mat, ink, natural, glassM, flatten, PIT, TOWER } = K;
   const UP = new THREE.Vector3(0, 1, 0);
   const bxg = (x0, y0, z0, x1, y1, z1) => new THREE.BoxGeometry(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
   // a square bar between two points
@@ -20,7 +20,7 @@ export function buildSite(K) {
   };
   const COL = {
     yellow: C.machine, dark: C.dark, steel: C.steel, galv: 0xC4C6C4, conc: C.concrete, timber: C.teak, white: C.cabin, lime: C.lime,
-    skin: 0xD9B08C, cloth: 0x3E4A52, coat: 0x8A8172, rubber: 0x2A2B2D, clad: C.clad, earth: C.earth, rebar: 0x6B4A36, linen: C.fabric, leaf: C.plant,
+    ballast: 0xA8A49C, skin: 0xD9B08C, cloth: 0x3E4A52, coat: 0x8A8172, rubber: 0x2A2B2D, clad: C.clad, earth: C.earth, rebar: 0x6B4A36, linen: C.fabric, leaf: C.plant,
   };
   // geometries by material, merged into one mesh each; `edged` ones also get fine ink edges
   function build(sets, edged = []) {
@@ -57,7 +57,7 @@ export function buildSite(K) {
     for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let k = 0; k < 2; k++) {
       const b = bxg(sx * 2.0 - 0.75, 0.3 + k * 0.62, sz * 2.0 - 0.75, sx * 2.0 + 0.75, 0.9 + k * 0.62, sz * 2.0 + 0.75); G.push(b); E.push(b);
     }
-    const mast = build({ yellow: Y, dark: D, conc: G, glass: GL }, E);
+    const mast = flatten(build({ yellow: Y, dark: D, ballast: G, glass: GL }, E));   // the crane is not a part: four objects that move, each drawn in one go
 
     // the jib along its own +z, the counter jib along -z
     const J = [], JD = [], JG = [], JE = [], th = 1.4, topY = (u) => th * (1 - (u - 0.9) / (L - 0.9)) + 0.28 * (u - 0.9) / (L - 0.9);
@@ -73,9 +73,9 @@ export function buildSite(K) {
     JD.push(bar(V(0, 5, 0), V(0, topY(L * 0.62), L * 0.62), 0.04), bar(V(0, 5, 0), V(0, 0.1, -Lc + 0.6), 0.04));
     JD.push(bxg(-0.6, -0.06, -Lc, 0.6, 0, -1.0));                                 // walkway of the counter jib
     for (let k = 0; k < 3; k++) { const b = bxg(-0.75, -1.25, -Lc + 0.3 + k * 0.82, 0.75, 0.2, -Lc + 1.02 + k * 0.82); JG.push(b); JE.push(b); }   // counterweights
-    const jib = build({ yellow: J, dark: JD, conc: JG }, JE);
-    const trolley = build({ dark: [bxg(-0.55, -0.5, -0.5, 0.55, -0.2, 0.5), cyl(0.12, 0.12, 1.2, 0, -0.14, -0.38, 10, 'x'), cyl(0.12, 0.12, 1.2, 0, -0.14, 0.38, 10, 'x')] });
-    const hook = build({ yellow: [bxg(-0.2, -0.05, -0.14, 0.2, 0.5, 0.14)], dark: [cyl(0.16, 0.16, 0.34, 0, 0.3, 0, 14, 'z'), bxg(-0.04, -0.4, -0.04, 0.04, -0.05, 0.04), bxg(-0.14, -0.46, -0.04, 0.04, -0.38, 0.04)] });
+    const jib = flatten(build({ yellow: J, dark: JD, ballast: JG }, JE));
+    const trolley = flatten(build({ dark: [bxg(-0.55, -0.5, -0.5, 0.55, -0.2, 0.5), cyl(0.12, 0.12, 1.2, 0, -0.14, -0.38, 10, 'x'), cyl(0.12, 0.12, 1.2, 0, -0.14, 0.38, 10, 'x')] }));
+    const hook = flatten(build({ yellow: [bxg(-0.2, -0.05, -0.14, 0.2, 0.5, 0.14)], dark: [cyl(0.16, 0.16, 0.34, 0, 0.3, 0, 14, 'z'), bxg(-0.04, -0.4, -0.04, 0.04, -0.05, 0.04), bxg(-0.14, -0.46, -0.04, 0.04, -0.38, 0.04)] }));
     return { mast, jib, trolley, hook };
   }
 
@@ -147,7 +147,7 @@ export function buildSite(K) {
 
   // ---------------------------------------------------------------- the machines come and go
   // the excavator stands in the pit and sinks with its floor (house.js moves it), gone before the slab is poured
-  const digger = on(put(excavator(), 11.6, 0, -2.2, Math.PI * 0.07), 1.0, 4.2, ['Kettenbagger', 'Stahl, 22 t', 'Reichweite 9,50 m · Löffel 1,2 m³'], { base: V(11.6, 0, -2.2), how: 'show', d: 0.1, out: 0.3 });
+  const digger = on(put(flatten(excavator()), 11.6, 0, -2.2, Math.PI * 0.07), 1.0, 4.2, ['Kettenbagger', 'Stahl, 22 t', 'Reichweite 9,50 m · Löffel 1,2 m³'], { live: true, base: V(11.6, 0, -2.2), how: 'show', d: 0.1, out: 0.3 });
   on(put(truck('tipper'), 24.6, gnd(24.6, 0.4) - 0.1, 0.4, Math.PI), 1.2, 3.3, ['Dreiachs-Kipper', 'Stahlmulde, 18 t Nutzlast', '7,40 × 2,50 × 3,00 m']);
   on(put(truck('mixer'), -4.6, 0, -2.4, 0), 3.4, 5.9, ['Fahrmischer', 'Trommel 8 m³, Beton C30/37', '7,40 × 2,50 × 3,60 m']);
   on(put(truck('flatbed'), -4.4, 0, 4.4, 0), 6.1, 16.6, ['Tieflader mit Wandelementen', 'Stahlbeton-Fertigteile auf A-Bock', '7,40 × 2,50 × 3,60 m']);

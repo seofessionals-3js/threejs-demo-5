@@ -38,11 +38,20 @@ Papier `#f1f0e6`, Waldgrün `#10241a`, Blattgrün `#5fa512`, Limette `#c4f03e`. 
 
 ## Dateien
 
-`index.html` (Seitensteuerung, Ansichtsoptionen, Zusammenfassung), `sketch.css` (Farben, Schriften, Layout), `view.js` (Kamera, Eingabe, HUD, das Gantt-Diagramm, der gedruckte Plan), `house.js` (Phasen, Gelände, Materialien, jedes Bauteil mit Bezeichnung, Maßen und Material), `site.js` (Kran, Maschinen, Stützen, Gerüst, Lager, Figuren, Bauschild), `access.js` (Abspielen, Ansichtsoptionen, Kapitel, Tasten, gesprochene Zeile).
+`index.html` (Seitensteuerung, Ansichtsoptionen, Zusammenfassung), `sketch.css` (Farben, Schriften, Layout), `view.js` (Kamera, Eingabe, HUD, das Gantt-Diagramm, der gedruckte Plan), `house.js` (Phasen, Gelände, Materialien, jedes Bauteil mit Bezeichnung, Maßen und Material), `site.js` (Kran, Maschinen, Stützen, Gerüst, Lager, Figuren, Bauschild), `quality.js` (Geräteklasse, Auflösung nach Bildrate), `access.js` (Abspielen, Ansichtsoptionen, Kapitel, Tasten, gesprochene Zeile).
 
-Parameter: `wk` (Woche 0 bis 38), `shot` (Kamera: `sig`, `a2`, `top`, `path`, `inside`), `room` (`entry`, `kitchen`, `living`, `stair`, `lounge`, `terrace`), `open` (nur der Plan).
+Parameter: `wk` (Woche 0 bis 38), `shot` (Kamera: `sig`, `a2`, `top`, `path`, `inside`), `room` (`entry`, `kitchen`, `living`, `stair`, `lounge`, `terrace`), `open` (nur der Plan), `q` (`low`, `mid`, `high`: Geräteklasse erzwingen), `dpr` (Auflösung festlegen), `rec` (Bildpuffer für Aufnahmen behalten), `always` (jedes Bild zeichnen, zum Messen).
 
-Am besten auf einem Laptop. Auf dem Handy ist die Seite bedienbar, aber eng.
+## Läuft auch auf dem Handy
+
+Die Seite fragt einmal, worauf sie läuft (`quality.js`), und richtet sich danach:
+
+- **Ein Haus, wenige Zeichenaufrufe.** Die rund 1 500 Bauteile sind keine einzelnen Objekte mehr. `add()` schreibt jedes Teil in einen Stapel je Material, und jede Ecke trägt die Wochen ihres Teils. Der Vertex-Shader senkt, hebt und färbt alle Teile aus einer einzigen Zahl, der Woche. Statt bis zu 1 300 Zeichenaufrufen je Bild sind es 20 bis 70.
+- **Der Aushub läuft im Shader.** Jeder Punkt des Geländes kennt seine Höhe im gewachsenen Hang, in der Baugrube und im fertigen Gelände, zwei Zahlen blenden dazwischen.
+- **Gezeichnet wird nur, wenn sich etwas ändert.** Steht die Woche und ruht der Kran, zeichnet die Seite kein einziges Bild, und die Schattenkarte entsteht nur neu, wenn sich ein Bauteil, der Kran oder die Sonne bewegt hat.
+- **Auflösung nach Bildrate.** Ein Handy beginnt mit etwa 0,75 Megapixeln, wird das Bild langsam, geht die Auflösung in kleinen Schritten zurück und später vorsichtig wieder hinauf. Schattenkarte, Geländeraster, Baumkronen und Texturfilter richten sich nach der Geräteklasse.
+- **Die Anzeige schreibt nur, was sich geändert hat.** Das Balkendiagramm wird einmal für seine Größe gezeichnet, danach ändern sich nur Balkenlängen und die Heute-Linie.
+- **Hochformat und Querformat.** Auf dem Handy tritt die Kamera zurück und öffnet das Objektiv, bis das ganze Grundstück ins Bild passt. Oben stehen drei kurze Zeilen, unten der Plan mit einer Karte fester Höhe. Wischen bewegt die Wochen, Ziehen am Diagramm spult.
 
 ## Lokal starten
 
@@ -52,7 +61,7 @@ Die Seiten nutzen JavaScript-Module und brauchen deshalb einen lokalen Server. E
 python -m http.server 8000
 ```
 
-Dann http://localhost:8000/ öffnen. Am besten auf einem Laptop mit aktuellem Browser.
+Dann http://localhost:8000/ öffnen, auf dem Laptop oder auf dem Handy.
 
 ## Herkunft und Lizenz
 
