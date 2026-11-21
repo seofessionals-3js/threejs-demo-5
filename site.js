@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function buildSite(K) {
-  const { C, V, add, mat, ink, natural, glassM, PIT, TOWER } = K;
+  const { C, V, add, mat, ink, natural, glassM, flatten, PIT, TOWER } = K;
   const UP = new THREE.Vector3(0, 1, 0);
   const bxg = (x0, y0, z0, x1, y1, z1) => new THREE.BoxGeometry(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
   // a square bar between two points
@@ -20,7 +20,7 @@ export function buildSite(K) {
   };
   const COL = {
     yellow: C.machine, dark: C.dark, steel: C.steel, galv: 0xC4C6C4, conc: C.concrete, timber: C.teak, white: C.cabin, lime: C.lime,
-    skin: 0xD9B08C, cloth: 0x3E4A52, coat: 0x8A8172, rubber: 0x2A2B2D, clad: C.clad, earth: C.earth, rebar: 0x6B4A36, linen: C.fabric, leaf: C.plant,
+    ballast: 0xA8A49C, skin: 0xD9B08C, cloth: 0x4A4F5C, coat: 0x8A8172, rubber: 0x2A2B2D, clad: C.clad, earth: C.earth, rebar: 0x6B4A36, linen: C.fabric, leaf: C.plant,
   };
   // geometries by material, merged into one mesh each; `edged` ones also get fine ink edges
   function build(sets, edged = []) {
@@ -57,7 +57,7 @@ export function buildSite(K) {
     for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let k = 0; k < 2; k++) {
       const b = bxg(sx * 2.0 - 0.75, 0.3 + k * 0.62, sz * 2.0 - 0.75, sx * 2.0 + 0.75, 0.9 + k * 0.62, sz * 2.0 + 0.75); G.push(b); E.push(b);
     }
-    const mast = build({ yellow: Y, dark: D, conc: G, glass: GL }, E);
+    const mast = flatten(build({ yellow: Y, dark: D, ballast: G, glass: GL }, E));   // the crane is not a part: four objects that move, each drawn in one go
 
     // the jib along its own +z, the counter jib along -z
     const J = [], JD = [], JG = [], JE = [], th = 1.4, topY = (u) => th * (1 - (u - 0.9) / (L - 0.9)) + 0.28 * (u - 0.9) / (L - 0.9);
@@ -73,9 +73,9 @@ export function buildSite(K) {
     JD.push(bar(V(0, 5, 0), V(0, topY(L * 0.62), L * 0.62), 0.04), bar(V(0, 5, 0), V(0, 0.1, -Lc + 0.6), 0.04));
     JD.push(bxg(-0.6, -0.06, -Lc, 0.6, 0, -1.0));                                 // walkway of the counter jib
     for (let k = 0; k < 3; k++) { const b = bxg(-0.75, -1.25, -Lc + 0.3 + k * 0.82, 0.75, 0.2, -Lc + 1.02 + k * 0.82); JG.push(b); JE.push(b); }   // counterweights
-    const jib = build({ yellow: J, dark: JD, conc: JG }, JE);
-    const trolley = build({ dark: [bxg(-0.55, -0.5, -0.5, 0.55, -0.2, 0.5), cyl(0.12, 0.12, 1.2, 0, -0.14, -0.38, 10, 'x'), cyl(0.12, 0.12, 1.2, 0, -0.14, 0.38, 10, 'x')] });
-    const hook = build({ yellow: [bxg(-0.2, -0.05, -0.14, 0.2, 0.5, 0.14)], dark: [cyl(0.16, 0.16, 0.34, 0, 0.3, 0, 14, 'z'), bxg(-0.04, -0.4, -0.04, 0.04, -0.05, 0.04), bxg(-0.14, -0.46, -0.04, 0.04, -0.38, 0.04)] });
+    const jib = flatten(build({ yellow: J, dark: JD, ballast: JG }, JE));
+    const trolley = flatten(build({ dark: [bxg(-0.55, -0.5, -0.5, 0.55, -0.2, 0.5), cyl(0.12, 0.12, 1.2, 0, -0.14, -0.38, 10, 'x'), cyl(0.12, 0.12, 1.2, 0, -0.14, 0.38, 10, 'x')] }));
+    const hook = flatten(build({ yellow: [bxg(-0.2, -0.05, -0.14, 0.2, 0.5, 0.14)], dark: [cyl(0.16, 0.16, 0.34, 0, 0.3, 0, 14, 'z'), bxg(-0.04, -0.4, -0.04, 0.04, -0.05, 0.04), bxg(-0.14, -0.46, -0.04, 0.04, -0.38, 0.04)] }));
     return { mast, jib, trolley, hook };
   }
 
@@ -121,7 +121,7 @@ export function buildSite(K) {
     return build(S, E);
   }
 
-  // ---------------------------------------------------------------- people: scale figures in helmets and lime vests
+  // ---------------------------------------------------------------- people: scale figures in helmets and hi-vis vests
   function person(visitor = false) {
     const S = { cloth: [bxg(-0.16, 0, -0.09, -0.02, 0.84, 0.09), bxg(0.02, 0, -0.09, 0.16, 0.84, 0.09)], skin: [new THREE.SphereGeometry(0.11, 12, 8).translate(0, 1.6, 0)] };
     const torso = [bxg(-0.2, 0.84, -0.12, 0.2, 1.44, 0.12), bxg(-0.3, 0.9, -0.07, -0.2, 1.42, 0.07), bxg(0.2, 0.9, -0.07, 0.3, 1.42, 0.07)];
@@ -147,7 +147,7 @@ export function buildSite(K) {
 
   // ---------------------------------------------------------------- the machines come and go
   // the excavator stands in the pit and sinks with its floor (house.js moves it), gone before the slab is poured
-  const digger = on(put(excavator(), 11.6, 0, -2.2, Math.PI * 0.07), 1.0, 4.2, ['Kettenbagger', 'Stahl, 22 t', 'Reichweite 9,50 m · Löffel 1,2 m³'], { base: V(11.6, 0, -2.2), how: 'show', d: 0.1, out: 0.3 });
+  const digger = on(put(flatten(excavator()), 11.6, 0, -2.2, Math.PI * 0.07), 1.0, 4.2, ['Kettenbagger', 'Stahl, 22 t', 'Reichweite 9,50 m · Löffel 1,2 m³'], { live: true, base: V(11.6, 0, -2.2), how: 'show', d: 0.1, out: 0.3 });
   on(put(truck('tipper'), 24.6, gnd(24.6, 0.4) - 0.1, 0.4, Math.PI), 1.2, 3.3, ['Dreiachs-Kipper', 'Stahlmulde, 18 t Nutzlast', '7,40 × 2,50 × 3,00 m']);
   on(put(truck('mixer'), -4.6, 0, -2.4, 0), 3.4, 5.9, ['Fahrmischer', 'Trommel 8 m³, Beton C30/37', '7,40 × 2,50 × 3,60 m']);
   on(put(truck('flatbed'), -4.4, 0, 4.4, 0), 6.1, 16.6, ['Tieflader mit Wandelementen', 'Stahlbeton-Fertigteile auf A-Bock', '7,40 × 2,50 × 3,60 m']);
@@ -279,17 +279,17 @@ export function buildSite(K) {
   const signTex = new THREE.CanvasTexture(signCanvas); signTex.colorSpace = THREE.SRGBColorSpace; signTex.anisotropy = 8;
   function drawSign() {
     const g = signCanvas.getContext('2d'), w = 768, h = 512;
-    g.fillStyle = '#10241a'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#c4f03e'; g.fillRect(0, 0, 14, h);
+    g.fillStyle = '#231d5e'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffd23c'; g.fillRect(0, 0, 14, h);
     g.textBaseline = 'alphabetic';
-    g.font = "400 86px 'BBH Bogle', Arimo, 'Arial Black', sans-serif"; g.fillStyle = '#f1f0e6'; g.fillText('PROJEKT', 54, 150);
-    g.fillStyle = '#c4f03e'; g.fillText('STEININGER', 54, 248);
-    g.font = "700 30px Arimo, Arial, sans-serif"; g.fillStyle = '#f1f0e6';
+    g.font = "400 86px 'BBH Bogle', Arimo, 'Arial Black', sans-serif"; g.fillStyle = '#eeedea'; g.fillText('PROJEKT', 54, 150);
+    g.fillStyle = '#ffd23c'; g.fillText('STEININGER', 54, 248);
+    g.font = "700 30px Arimo, Arial, sans-serif"; g.fillStyle = '#eeedea';
     g.fillText('HAUS AM HANG · 38 WOCHEN', 56, 330);
-    g.font = "600 25px Arimo, Arial, sans-serif"; g.fillStyle = 'rgba(241,240,230,0.82)';
+    g.font = "600 25px Arimo, Arial, sans-serif"; g.fillStyle = 'rgba(238,237,234,0.82)';
     g.fillText('START 1. MÄR 2027 · SCHLÜSSEL 19. NOV 2027', 56, 380);
     g.fillText('STAHLBETON · TRAVERTIN · BGF 480 M²', 56, 424);
-    g.strokeStyle = '#c4f03e'; g.lineWidth = 3; g.strokeRect(40, 40, w - 80, h - 80);
+    g.strokeStyle = '#ffd23c'; g.lineWidth = 3; g.strokeRect(40, 40, w - 80, h - 80);
     signTex.needsUpdate = true;
   }
   drawSign();
