@@ -467,6 +467,22 @@ body.contrast #cad-hud .ch-c { border-color: var(--ink); }
 
 /* An upright phone. Three short rows at the top (name and controls, variant and week, the headline), the model
    in the middle, the programme docked at the bottom with a card of fixed height, so the chart never changes size. */
+/* the folded plan: one slim strip of the 38 weeks (done = violet, in work = yellow, today = yellow bar) and a handle */
+.plan-col { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.plan-row { display: flex; align-items: center; gap: 8px; }
+.strip { position: relative; flex: 1; height: 14px; border: 1.5px solid var(--ink); background: rgba(var(--ink-rgb), 0.07); }
+.strip i { position: absolute; top: 0; bottom: 0; display: block; }
+.strip .st-done { left: 0; background: var(--ink); }
+.strip .st-live { background: var(--mark); border: 1.5px solid var(--ink); top: -1.5px; bottom: -1.5px; }
+.strip .st-now { width: 3px; margin-left: -1.5px; top: -5px; bottom: -5px; background: var(--mark); outline: 1.5px solid var(--ink); }
+.plan-btn { pointer-events: auto; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px; border: 0; background: var(--ink); color: var(--mark);
+  font: 700 9.5px/1 var(--label); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+.plan-btn svg { width: 10px; height: 6px; transition: transform 0.2s; }
+.plan-btn[aria-expanded="false"] svg { transform: none; }
+.plan-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.prog.collapsed .chart { display: none; }
+.prog-hero.min h1 { display: none; }
+
 @media (max-width: 760px) {
   :root { --gx: 10px; }
   #cad-hud { inset: 4px; }
@@ -504,6 +520,10 @@ body.contrast #cad-hud .ch-c { border-color: var(--ink); }
   .prog .prog-side .room-tabs, .band .now .room-tabs { margin-top: auto; flex-wrap: nowrap; gap: 3px; }
   .prog .prog-side .room-tab, .band .now .room-tab { flex: 1 1 auto; padding: 6px 2px 5px; font-size: 7.5px; letter-spacing: 0.04em; text-align: center; white-space: nowrap; overflow: hidden; }
   .prog .chart, .band .chart { flex: none; height: clamp(138px, 20vh, 186px); }
+  .prog.collapsed .prog-side { height: 84px; }
+  .prog.collapsed .prog-side:has(.room-tabs) { height: 100px; }
+  .prog.collapsed .prog-side .side-body .what { display: none; }
+  .prog.collapsed { gap: 6px; }
   .band .now .ph { overflow: hidden; }
   /* in the card the part in work is one line: its name and its size */
   .piece { flex-direction: row; flex-wrap: nowrap; gap: 8px; margin-top: 1px; padding-top: 4px; align-items: baseline; white-space: nowrap; overflow: hidden; }
@@ -550,6 +570,11 @@ body.contrast #cad-hud .ch-c { border-color: var(--ink); }
   .cam .tl .stamp { display: none; }
   .cam .frame { inset: 5px; }
   .prog, .band { left: 8px; right: 8px; bottom: 8px; height: 158px; gap: 10px; padding: 8px 10px; }
+  .prog.compact { height: 190px; }
+  .prog.collapsed { height: auto; }
+  .prog.collapsed .prog-side { height: 70px; }
+  .prog.compact .plan-col { justify-content: center; }
+  .prog.compact:not(.collapsed) .chart { flex: 1; height: auto; min-height: 0; }
   .prog .prog-side, .band .now { width: 264px; margin: 0; padding: 8px 12px 7px; overflow: hidden; }
   .prog .prog-side .count, .band .now .wk { font-size: 22px; }
   .prog .prog-side .title { font-size: 14px; }

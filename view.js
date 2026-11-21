@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { tier, low, mid, governor, visible, onStableResize } from './quality.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildHouse, groundMaterial, natural, PHASES, MILESTONES, WEEKS, TOUR_W0, C, dateAt, clamp01, POOL, SITE, PIT, FOOTINGS } from './house.js';
+import { buildHouse, groundMaterial, natural, PHASES, MILESTONES, WEEKS, TOUR_W0, C, dateAt, clamp01, smooth, POOL, SITE, PIT, FOOTINGS } from './house.js';
 
 const SEQ = window.SEQ || (window.SEQ = {});
 const prefs = () => SEQ.prefs || {};
@@ -262,9 +262,12 @@ function fitPose(shotKey) {
   fitAt.set(s.at[0], s.at[1], s.at[2]); fitPos.set(s.pos[0], s.pos[1], s.pos[2]);
   const t = Math.tan(THREE.MathUtils.degToRad(s.fov) / 2);
   if (inside) {
-    const k = Math.min(1.75, Math.max(1, 1.25 / aspect));
-    fitFov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.min(Math.tan(THREE.MathUtils.degToRad(41)), t * k)));
+    const port = aspect < 0.7;
+    const k = Math.min(port ? 2.2 : 1.75, Math.max(1, 1.25 / aspect));
+    fitFov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.min(Math.tan(THREE.MathUtils.degToRad(port ? 48 : 41)), t * k)));
     fitBack = 1;
+    // in a tall picture the last stations look down onto the terrace and the pool, not across the facade
+    if (port && shotKey === 'inside') fitAt.y -= 4.2 * Math.min(1, (0.7 - aspect) / 0.2) * smooth(0.95, 0.985, state.tour);
   } else {
     const k = Math.min(3.3, Math.max(1, 1.42 / aspect)), back = Math.pow(k, 0.5);
     fitFov = THREE.MathUtils.radToDeg(2 * Math.atan(t * k / back));
@@ -537,9 +540,11 @@ function nowText(T) {
 // The HUD is built once for its layout (variant, open sheet, size of the window, view options). After that
 // renderHud() only writes the words and numbers that changed: the week counts sixty times a second while the
 // build plays, and rebuilding the chart that often is what made the page stutter.
+let planOpen = false;     // phone: the full chart under the head is folded away until the visitor asks for it
+const isCompact = () => state.dir === 'a' && !state.open && (VW < 760 || VH <= 520);
 let hudKey = '', chart = null, H = {}, frameBox = { top: 0, dock: 0 }, said = '';
 function buildHud(tabs, camIn) {
-  const narrow = isNarrow();
+  const narrow = isNarrow(), compact = isCompact();
   chart = null;
   if (state.dir === 'a' && state.open) {
     hudBody.innerHTML = `
@@ -567,7 +572,7 @@ function buildHud(tabs, camIn) {
         <h1><span>Ihr Haus in</span> <em>38 Wochen.</em></h1>
         <div class="meta mono">${META_SHORT}</div>
       </div>
-      <div class="prog">
+      <div class="prog${compact ? ` compact${planOpen ? '' : ' collapsed'}` : ''}">
         <div class="prog-side">
           <div class="side-top">
             <div class="count">Wo. <span data-f="wk"></span><small> / ${WEEKS}</small></div>
@@ -580,9 +585,14 @@ function buildHud(tabs, camIn) {
           </div>
           ${tabs ? roomTabs() : ''}
         </div>
-        <div class="chart"></div>
+        <div class="plan-col">
+          ${compact ? `<div class="plan-row"><div class="strip" role="img" aria-label="Fortschritt in 38 Wochen"><i class="st-done"></i><i class="st-live"></i><i class="st-now"></i></div><button type="button" class="plan-btn" aria-expanded="${planOpen}" aria-controls="planChart"><span>Plan</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button></div>` : ''}
+          <div class="chart" id="planChart"></div>
+        </div>
       </div>`;
     chart = makeChart(hudBody.querySelector('.prog .chart'), { compact: true, labelW: narrow ? 118 : 172, showDur: !narrow });
+    const pb = hudBody.querySelector('.plan-btn');
+    if (pb) pb.addEventListener('click', () => { planOpen = !planOpen; renderHud(); const b = hudBody.querySelector('.plan-btn'); if (b) b.focus(); });
   } else if (state.dir === 'b') {
     hudBody.innerHTML = `
       <div class="corner tl mono">
@@ -641,12 +651,23 @@ function renderHud() {
   const piece = isInside ? null : house.label();
   const open = state.dir === 'a' && state.open, tabs = isInside || T >= 36.9, camIn = state.dir === 'c' && (state.shot === 'path' || isInside);
   renderBar();
-  const key = [state.dir, open, tabs, camIn, VW, VH, !!P.large, !!P.contrast].join('|');
+  const key = [state.dir, open, tabs, camIn, planOpen, VW, VH, !!P.large, !!P.contrast].join('|');
   if (key !== hudKey) { hudKey = key; document.body.classList.toggle('open', open); buildHud(tabs, camIn); }
   const date = `${fmtDay(day).toUpperCase()} 2027`;
 
   if (state.dir === 'a' && !open) {
     H.hero.classList.toggle('inside-dim', isInside);
+    H.hero.classList.toggle('min', isCompact() && T > 0.4);   // the headline leaves the model alone once the build has begun
+    const stK = hudBody.querySelector('.strip');
+    if (stK) {
+      const lv = activePhases(T), pc = v => (100 * v / WEEKS).toFixed(2) + '%';
+      const a = lv.length ? lv[0].w0 : 0, b = lv.length ? lv[lv.length - 1].w1 : 0;
+      const stv = [pc(T), pc(a), pc(Math.max(0, b - a)), pc(T)].join();
+      if (stK.__v !== stv) {
+        stK.__v = stv; const [d, l, n] = stK.children;
+        d.style.width = pc(T); l.style.left = pc(a); l.style.width = pc(Math.max(0, b - a)); l.style.display = lv.length ? '' : 'none'; n.style.left = pc(T);
+      }
+    }
     put(H.wk, pad2(weekNo(T))); put(H.date, date);
     put(H.lv, isInside ? curStop.lv : `${N.code} // ${pct}% FERTIG`);
     put(H.title, isInside ? curStop.title : N.title);
