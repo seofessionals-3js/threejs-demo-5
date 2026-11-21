@@ -1,21 +1,20 @@
-/* Projekt Steininger: paper, forest green and lime. BBH Bogle for the headlines, Arimo for everything that is read.
+/* Projekt Steininger: diazo whiteprint (Lichtpause): paper, diazo violet and highlighter yellow. BBH Bogle for the headlines, Arimo for everything that is read.
    BBH Bogle has no umlauts, so anything that may carry one is set in Arimo. */
 @font-face { font-family: 'BBH Bogle'; src: url('fonts/BBHBogle-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Arimo'; src: url('fonts/Arimo-VariableFont_wght.woff2') format('woff2'); font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
-  --paper: #f1f0e6;
-  --paper-2: #e6e5d6;
-  --ink: #10241a;       /* deep forest: text, lines, every dark overlay */
-  --leaf: #5fa512;      /* the green of the bar in work, on paper */
-  --leaf-ink: #3d7607;  /* the same green, dark enough to be read as small text on paper */
-  --lime: #c4f03e;      /* the light on the dark overlays */
-  --deep: 11, 26, 18;   /* the glass of the overlays on site */
-  --ink-rgb: 16, 36, 26;
-  --paper-rgb: 241, 240, 230;
-  --ink-2: rgba(var(--ink-rgb), 0.74);
-  --ink-3: rgba(var(--ink-rgb), 0.2);
-  --ink-4: rgba(var(--ink-rgb), 0.07);
-  --accent: var(--leaf);
+  --paper: #eeedea;
+  --paper-2: #e2e1e4;
+  --ink: #3d3492;       /* diazo violet: text, lines, bars, contours */
+  --mark: #ffd23c;     /* highlighter yellow: what is in work, on paper and on the dark overlays */
+  --mark-ink: #8a5b00; /* the same yellow, dark enough to be read as small text on paper */
+  --deep: 35, 29, 94;   /* deep indigo: the glass of the overlays on site */
+  --ink-rgb: 61, 52, 146;
+  --paper-rgb: 238, 237, 234;
+  --ink-2: rgba(var(--ink-rgb), 0.78);
+  --ink-3: rgba(var(--ink-rgb), 0.22);
+  --ink-4: rgba(var(--ink-rgb), 0.08);
+  --accent: var(--mark);
   --gx: 24px;
   --label: 'Arimo', 'Helvetica Neue', Arial, sans-serif;
   --display: 'BBH Bogle', 'Arimo', 'Arial Black', sans-serif;
@@ -46,7 +45,7 @@ a { color: inherit; }
 
 /* read aloud, not shown */
 .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-:focus-visible { outline: 2px solid var(--leaf-ink); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--mark-ink); outline-offset: 2px; }
 
 /* ------------------------------------------------------------------ Registration brackets & brand badge */
 #cad-hud { position: fixed; inset: 10px; pointer-events: none; z-index: 5; }
@@ -66,8 +65,8 @@ a { color: inherit; }
   padding: 9px 12px 8px;
   white-space: nowrap;
 }
-.brand-badge::before { content: '[ '; color: var(--lime); }
-.brand-badge::after { content: ' // A-905 ]'; color: var(--lime); font: 600 10.5px/1 var(--label); letter-spacing: 0.12em; }
+.brand-badge::before { content: '[ '; color: var(--mark); }
+.brand-badge::after { content: ' // A-905 ]'; color: var(--mark); font: 600 10.5px/1 var(--label); letter-spacing: 0.12em; }
 .brand-badge.cam-badge::after { content: ' // REC ]'; }
 .dwg-tag {
   border: 1.5px solid var(--ink);
@@ -96,31 +95,31 @@ a { color: inherit; }
 .tool svg { width: 11px; height: 11px; flex: none; fill: currentColor; }
 .tool .i-pause, .tool[aria-pressed="true"] .i-play { display: none; }
 .tool[aria-pressed="true"] .i-pause { display: block; }
-.tool:hover, .tool:focus-visible, .tool[aria-pressed="true"], .tool[aria-expanded="true"], .cta:hover, .cta:focus-visible { background: var(--ink); color: var(--lime); outline: none; }
+.tool:hover, .tool:focus-visible, .tool[aria-pressed="true"], .tool[aria-expanded="true"], .cta:hover, .cta:focus-visible { background: var(--ink); color: var(--mark); outline: none; }
 
 .panel {
   position: fixed; z-index: 31; top: 58px; right: var(--gx); width: 286px; max-height: calc(100vh - 76px); overflow: auto;
-  background: rgba(var(--deep), 0.95); color: var(--paper); border-left: 3px solid var(--lime);
+  background: rgba(var(--deep), 0.95); color: var(--paper); border-left: 3px solid var(--mark);
   padding: 14px 16px 12px; font: 500 12px/1.35 var(--label);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
 .panel[hidden] { display: none; }
-.panel h2 { font: 700 9.5px/1 var(--label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--lime); margin: 0 0 9px; }
+.panel h2 { font: 700 9.5px/1 var(--label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--mark); margin: 0 0 9px; }
 .panel h2:not(:first-child) { margin-top: 15px; }
 .panel label { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; cursor: pointer; }
 .panel label small { display: block; font-size: 10.5px; color: rgba(var(--paper-rgb), 0.7); margin-top: 1px; }
 .panel input { appearance: none; -webkit-appearance: none; flex: none; width: 14px; height: 14px; margin: 1px 0 0; border: 1.5px solid var(--paper); background: transparent; cursor: pointer; }
-.panel input:checked { background: var(--lime); border-color: var(--lime); box-shadow: inset 0 0 0 2.5px rgb(var(--deep)); }
+.panel input:checked { background: var(--mark); border-color: var(--mark); box-shadow: inset 0 0 0 2.5px rgb(var(--deep)); }
 .panel ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }
 .panel ol button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 7px; width: 100%; padding: 5px 0; cursor: pointer; font-size: 11.5px; }
-.panel ol button:hover { color: var(--lime); }
-.panel kbd { font: 700 9px/1 var(--label); min-width: 15px; text-align: center; padding: 3px 0 2px; border: 1px solid rgba(var(--paper-rgb), 0.4); color: var(--lime); }
+.panel ol button:hover { color: var(--mark); }
+.panel kbd { font: 700 9px/1 var(--label); min-width: 15px; text-align: center; padding: 3px 0 2px; border: 1px solid rgba(var(--paper-rgb), 0.4); color: var(--mark); }
 .panel .keys { margin: 13px 0 0; padding-top: 10px; border-top: 1px solid rgba(var(--paper-rgb), 0.16); font-size: 10.5px; line-height: 1.9; color: rgba(var(--paper-rgb), 0.76); }
 .panel .keys kbd { display: inline-block; padding: 3px 4px 2px; margin: 0 1px; }
 .panel .by { margin: 11px 0 0; padding-top: 10px; border-top: 1px solid rgba(var(--paper-rgb), 0.16); font-size: 10.5px; line-height: 1.5; color: rgba(var(--paper-rgb), 0.76); }
 .panel .by b { color: var(--paper); }
-.panel .by a { color: var(--lime); text-decoration: none; border-bottom: 1px solid rgba(196, 240, 62, 0.4); }
-.panel :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.panel .by a { color: var(--mark); text-decoration: none; border-bottom: 1px solid rgba(255, 210, 60, 0.5); }
+.panel :focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
 
 /* ------------------------------------------------------------------ The CAD bar: variant, camera, week */
 .cad-bar {
@@ -167,7 +166,7 @@ a { color: inherit; }
 }
 .cad-btn:last-child { border-right: 0; }
 .cad-btn:hover { background: rgba(var(--ink-rgb), 0.09); }
-.cad-btn.on { background: var(--ink); color: var(--lime); font-weight: 700; }
+.cad-btn.on { background: var(--ink); color: var(--mark); font-weight: 700; }
 .cad-btn:focus-visible { outline-offset: -3px; }
 .cad-scrub { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
 .cad-scrub input[type="range"] {
@@ -184,11 +183,11 @@ a { color: inherit; }
   appearance: none;
   width: 9px;
   height: 15px;
-  background: var(--lime);
+  background: var(--mark);
   border: 1.5px solid var(--ink);
   cursor: ew-resize;
 }
-.cad-scrub input[type="range"]::-moz-range-thumb { width: 7px; height: 13px; background: var(--lime); border: 1.5px solid var(--ink); border-radius: 0; cursor: ew-resize; }
+.cad-scrub input[type="range"]::-moz-range-thumb { width: 7px; height: 13px; background: var(--mark); border: 1.5px solid var(--ink); border-radius: 0; cursor: ew-resize; }
 .cad-scrub .wk-readout { min-width: 58px; text-align: right; font-weight: 700; color: var(--ink); }
 
 /* ------------------------------------------------------------------ The card: what is being built, or the room you stand in */
@@ -202,13 +201,13 @@ a { color: inherit; }
   background: rgba(var(--deep), 0.93);
   color: var(--paper);
   padding: 13px 17px 12px;
-  border-left: 3px solid var(--lime);
+  border-left: 3px solid var(--mark);
   z-index: 12;
   pointer-events: auto;
   min-width: 280px;
   max-width: 440px;
 }
-.room-card .lv { font: 700 9.5px/1.2 var(--label); letter-spacing: 0.14em; color: var(--lime); text-transform: uppercase; }
+.room-card .lv { font: 700 9.5px/1.2 var(--label); letter-spacing: 0.14em; color: var(--mark); text-transform: uppercase; }
 .room-card b { font: 700 22px/1.05 var(--label); text-transform: uppercase; letter-spacing: 0.02em; color: var(--paper); }
 .room-card .nt { font: 500 10px/1.45 var(--label); letter-spacing: 0.08em; text-transform: uppercase; color: rgba(var(--paper-rgb), 0.84); }
 .room-tabs {
@@ -233,23 +232,23 @@ a { color: inherit; }
   pointer-events: auto;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.room-tab:hover { border-color: var(--lime); color: var(--lime); }
-.room-tab.on { background: var(--lime); border-color: var(--lime); color: var(--ink); font-weight: 700; }
-.room-tab:focus-visible { outline-color: var(--lime); }
+.room-tab:hover { border-color: var(--mark); color: var(--mark); }
+.room-tab.on { background: var(--mark); border-color: var(--mark); color: var(--ink); font-weight: 700; }
+.room-tab:focus-visible { outline-color: var(--mark); }
 
 /* ------------------------------------------------------------------ The label at the part in work: what it is, how big, what it is made of */
 #part-tag { position: fixed; inset: 0; z-index: 13; pointer-events: none; opacity: 0; transition: opacity 0.18s; }
 #part-tag.on { opacity: 1; }
 #part-tag svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 #part-tag line { stroke: var(--ink); stroke-width: 1.3; }
-#part-tag circle { fill: var(--lime); stroke: var(--ink); stroke-width: 1.5; }
+#part-tag circle { fill: var(--mark); stroke: var(--ink); stroke-width: 1.5; }
 #part-tag .box {
   position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 3px;
   min-width: 196px; max-width: 330px; padding: 9px 13px 8px;
-  background: rgba(var(--deep), 0.93); color: var(--paper); border-left: 3px solid var(--lime);
+  background: rgba(var(--deep), 0.93); color: var(--paper); border-left: 3px solid var(--mark);
   will-change: transform;
 }
-#part-tag .lv { font: 700 9px/1.2 var(--label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--lime); }
+#part-tag .lv { font: 700 9px/1.2 var(--label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mark); }
 #part-tag b { font: 700 13.5px/1.18 var(--label); letter-spacing: 0.02em; }
 #part-tag .dm { font: 600 11.5px/1.3 var(--label); letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
 #part-tag .nt { font: 500 10.5px/1.35 var(--label); letter-spacing: 0.03em; color: rgba(var(--paper-rgb), 0.84); }
@@ -257,7 +256,7 @@ a { color: inherit; }
 .piece { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(var(--paper-rgb), 0.18); text-transform: none; }
 .room-card .piece b, .prog .prog-side .piece b, .band .now .ph .piece b { font: 700 11.5px/1.2 var(--label); letter-spacing: 0.05em; text-transform: uppercase; color: var(--paper); }
 .piece span { font: 500 10.5px/1.35 var(--label); letter-spacing: 0.03em; color: rgba(var(--paper-rgb), 0.84); }
-.piece .dm { font-weight: 600; color: var(--lime); font-variant-numeric: tabular-nums; }
+.piece .dm { font-weight: 600; color: var(--mark); font-variant-numeric: tabular-nums; }
 body.large #part-tag b { font-size: 15.5px; }
 body.large #part-tag .dm, body.large #part-tag .nt, body.large .piece span { font-size: 12.5px; }
 body.large #part-tag .lv { font-size: 10.5px; }
@@ -286,7 +285,7 @@ body.contrast #part-tag line { stroke-width: 2; }
   margin: 0 0 10px;
   white-space: nowrap;
 }
-.prog-hero h1 em, .prog h1 em { font-style: normal; color: var(--lime); background: var(--ink); padding: 0.04em 0.22em 0; }
+.prog-hero h1 em, .prog h1 em { font-style: normal; color: var(--mark); background: var(--ink); padding: 0.04em 0.22em 0; }
 /* the first words stand on paper, so they stay readable over whatever is being built behind them */
 .prog-hero h1 span { background: rgba(var(--paper-rgb), 0.9); padding: 0.04em 0.16em 0 0.12em; margin-left: -0.12em; }
 .prog-hero .meta {
@@ -334,7 +333,7 @@ body.contrast #part-tag line { stroke-width: 2; }
   flex-shrink: 0;
   background: rgba(var(--deep), 0.95);
   color: var(--paper);
-  border-left: 3px solid var(--lime);
+  border-left: 3px solid var(--mark);
   padding: 13px 16px 12px;
   display: flex;
   flex-direction: column;
@@ -343,9 +342,9 @@ body.contrast #part-tag line { stroke-width: 2; }
 .prog .prog-side .side-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .prog .prog-side .count { font: 400 30px/0.95 var(--display); letter-spacing: 0.01em; text-transform: uppercase; font-variant-numeric: tabular-nums; color: var(--paper); }
 .prog .prog-side .count small { font: 600 11px/1 var(--label); color: rgba(var(--paper-rgb), 0.7); letter-spacing: 0.08em; }
-.prog .prog-side .date-badge { font: 700 9.5px/1 var(--label); color: var(--lime); letter-spacing: 0.12em; text-transform: uppercase; }
+.prog .prog-side .date-badge { font: 700 9.5px/1 var(--label); color: var(--mark); letter-spacing: 0.12em; text-transform: uppercase; }
 .prog .prog-side .side-body { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-.prog .prog-side .lv { font: 700 9.5px/1.2 var(--label); letter-spacing: 0.12em; color: var(--lime); text-transform: uppercase; }
+.prog .prog-side .lv { font: 700 9.5px/1.2 var(--label); letter-spacing: 0.12em; color: var(--mark); text-transform: uppercase; }
 .prog .prog-side .title { font: 700 19px/1.05 var(--label); text-transform: uppercase; letter-spacing: 0.02em; color: var(--paper); }
 .prog .prog-side .spec-line { font: 500 9.5px/1.4 var(--label); letter-spacing: 0.07em; text-transform: uppercase; color: rgba(var(--paper-rgb), 0.84); }
 .prog .prog-side .room-tabs { margin-top: 6px; padding-top: 6px; }
@@ -371,15 +370,15 @@ body.contrast #part-tag line { stroke-width: 2; }
 .prog.full .chart { margin-top: 18px; }
 .prog .chart svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .gantt-row { cursor: pointer; }
-.gantt-row:hover .row-bg { fill: rgba(95, 165, 18, 0.12); }
+.gantt-row:hover .row-bg { fill: rgba(255, 210, 60, 0.28); }
 
 .prog .foot { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-top: 12px; padding-top: 12px; border-top: 1.5px solid var(--ink); }
 .prog.full .foot .hint { font-size: 10.5px; color: var(--ink); display: flex; gap: 12px; align-items: center; }
-.prog.full .foot .hint i { width: 3px; height: 28px; background: var(--leaf); display: block; flex: none; }
+.prog.full .foot .hint i { width: 3px; height: 28px; background: var(--mark); display: block; flex: none; }
 .prog.full .foot .note { font-size: 9.5px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
 .prog.full .foot .note b { color: var(--ink); font-weight: 700; }
 .prog.full .foot .note a { text-decoration: none; border-bottom: 1px solid rgba(var(--ink-rgb), 0.35); padding-bottom: 1px; pointer-events: auto; }
-.prog.full .foot .note a:hover { border-color: var(--leaf); }
+.prog.full .foot .note a:hover { border-color: var(--mark); }
 
 /* ------------------------------------------------------------------ B · The sheet is the site */
 .corner {
@@ -419,13 +418,13 @@ body.contrast #part-tag line { stroke-width: 2; }
   margin-right: 18px;
   background: rgba(var(--deep), 0.95);
   color: var(--paper);
-  border-left: 3px solid var(--lime);
+  border-left: 3px solid var(--mark);
   display: flex; flex-direction: column; justify-content: space-between;
 }
 .band .now .wk { font: 400 32px/0.95 var(--display); letter-spacing: 0.01em; text-transform: uppercase; font-variant-numeric: tabular-nums; color: var(--paper); }
-.band .now .wk small { font: 700 11px/1 var(--label); color: var(--lime); letter-spacing: 0.08em; }
+.band .now .wk small { font: 700 11px/1 var(--label); color: var(--mark); letter-spacing: 0.08em; }
 .band .now .ph { font-size: 10px; line-height: 1.45; color: var(--paper); }
-.band .now .ph b { color: var(--lime); font-weight: 700; }
+.band .now .ph b { color: var(--mark); font-weight: 700; }
 .band .now .ph .sub { color: rgba(var(--paper-rgb), 0.82); font-size: 9.5px; font-weight: 500; letter-spacing: 0.07em; margin-top: 2px; }
 .band .now .room-tabs { margin-top: 6px; padding-top: 5px; }
 .band .now .room-tab { padding: 4px 5px 3px; font-size: 8px; letter-spacing: 0.08em; }
@@ -448,11 +447,11 @@ body.large .panel { font-size: 13.5px; width: 310px; }
 body.large .panel ol button { font-size: 13px; }
 body.large .prog.full .foot .hint, body.large .prog.full .foot .note { font-size: 11.5px; }
 /* Higher contrast: solid overlays, full strength text, heavier lines */
-body.contrast { --ink: #06140d; --ink-rgb: 6, 20, 13; --leaf-ink: #2c5903; --deep: 4, 14, 9; --ink-2: #06140d; --ink-3: rgba(6, 20, 13, 0.5); }
+body.contrast { --ink: #241d68; --ink-rgb: 36, 29, 104; --mark-ink: #6b4500; --deep: 22, 17, 70; --ink-2: #241d68; --ink-3: rgba(36, 29, 104, 0.5); }
 body.contrast .room-card, body.contrast .prog .prog-side, body.contrast .band .now, body.contrast .panel, body.contrast .cam .tl .stamp { background: rgb(var(--deep)); backdrop-filter: none; -webkit-backdrop-filter: none; }
 body.contrast .prog, body.contrast .band, body.contrast .cad-bar, body.contrast .tool, body.contrast .cta, body.contrast .corner, body.contrast .dwg-tag, body.contrast .prog-hero .meta { background: var(--paper); border-width: 2px; }
 body.contrast .corner.tl { background: transparent; border-width: 0; }
-body.contrast .tool:hover, body.contrast .tool:focus-visible, body.contrast .tool[aria-pressed="true"], body.contrast .tool[aria-expanded="true"], body.contrast .cta:hover, body.contrast .cta:focus-visible { background: var(--ink); color: var(--lime); }
+body.contrast .tool:hover, body.contrast .tool:focus-visible, body.contrast .tool[aria-pressed="true"], body.contrast .tool[aria-expanded="true"], body.contrast .cta:hover, body.contrast .cta:focus-visible { background: var(--ink); color: var(--mark); }
 body.contrast .room-card .nt, body.contrast .prog .prog-side .spec-line, body.contrast .band .now .ph .sub, body.contrast .room-tab, body.contrast .panel label small, body.contrast .panel .keys, body.contrast .panel .by { color: var(--paper); }
 body.contrast .room-tab { border-color: var(--paper); }
 body.contrast .room-tab.on { color: var(--ink); }

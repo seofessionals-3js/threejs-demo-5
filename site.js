@@ -20,7 +20,7 @@ export function buildSite(K) {
   };
   const COL = {
     yellow: C.machine, dark: C.dark, steel: C.steel, galv: 0xC4C6C4, conc: C.concrete, timber: C.teak, white: C.cabin, lime: C.lime,
-    ballast: 0xA8A49C, skin: 0xD9B08C, cloth: 0x3E4A52, coat: 0x8A8172, rubber: 0x2A2B2D, clad: C.clad, earth: C.earth, rebar: 0x6B4A36, linen: C.fabric, leaf: C.plant,
+    ballast: 0xA8A49C, skin: 0xD9B08C, cloth: 0x4A4F5C, coat: 0x8A8172, rubber: 0x2A2B2D, clad: C.clad, earth: C.earth, rebar: 0x6B4A36, linen: C.fabric, leaf: C.plant,
   };
   // geometries by material, merged into one mesh each; `edged` ones also get fine ink edges
   function build(sets, edged = []) {
@@ -121,7 +121,7 @@ export function buildSite(K) {
     return build(S, E);
   }
 
-  // ---------------------------------------------------------------- people: scale figures in helmets and lime vests
+  // ---------------------------------------------------------------- people: scale figures in helmets and hi-vis vests
   function person(visitor = false) {
     const S = { cloth: [bxg(-0.16, 0, -0.09, -0.02, 0.84, 0.09), bxg(0.02, 0, -0.09, 0.16, 0.84, 0.09)], skin: [new THREE.SphereGeometry(0.11, 12, 8).translate(0, 1.6, 0)] };
     const torso = [bxg(-0.2, 0.84, -0.12, 0.2, 1.44, 0.12), bxg(-0.3, 0.9, -0.07, -0.2, 1.42, 0.07), bxg(0.2, 0.9, -0.07, 0.3, 1.42, 0.07)];
@@ -279,17 +279,17 @@ export function buildSite(K) {
   const signTex = new THREE.CanvasTexture(signCanvas); signTex.colorSpace = THREE.SRGBColorSpace; signTex.anisotropy = 8;
   function drawSign() {
     const g = signCanvas.getContext('2d'), w = 768, h = 512;
-    g.fillStyle = '#10241a'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#c4f03e'; g.fillRect(0, 0, 14, h);
+    g.fillStyle = '#231d5e'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffd23c'; g.fillRect(0, 0, 14, h);
     g.textBaseline = 'alphabetic';
-    g.font = "400 86px 'BBH Bogle', Arimo, 'Arial Black', sans-serif"; g.fillStyle = '#f1f0e6'; g.fillText('PROJEKT', 54, 150);
-    g.fillStyle = '#c4f03e'; g.fillText('STEININGER', 54, 248);
-    g.font = "700 30px Arimo, Arial, sans-serif"; g.fillStyle = '#f1f0e6';
+    g.font = "400 86px 'BBH Bogle', Arimo, 'Arial Black', sans-serif"; g.fillStyle = '#eeedea'; g.fillText('PROJEKT', 54, 150);
+    g.fillStyle = '#ffd23c'; g.fillText('STEININGER', 54, 248);
+    g.font = "700 30px Arimo, Arial, sans-serif"; g.fillStyle = '#eeedea';
     g.fillText('HAUS AM HANG · 38 WOCHEN', 56, 330);
-    g.font = "600 25px Arimo, Arial, sans-serif"; g.fillStyle = 'rgba(241,240,230,0.82)';
+    g.font = "600 25px Arimo, Arial, sans-serif"; g.fillStyle = 'rgba(238,237,234,0.82)';
     g.fillText('START 1. MÄR 2027 · SCHLÜSSEL 19. NOV 2027', 56, 380);
     g.fillText('STAHLBETON · TRAVERTIN · BGF 480 M²', 56, 424);
-    g.strokeStyle = '#c4f03e'; g.lineWidth = 3; g.strokeRect(40, 40, w - 80, h - 80);
+    g.strokeStyle = '#ffd23c'; g.lineWidth = 3; g.strokeRect(40, 40, w - 80, h - 80);
     signTex.needsUpdate = true;
   }
   drawSign();

@@ -24,13 +24,13 @@ export const MILESTONES = [[6.0, 'M1 · Bodenplatte'], [24.6, 'M2 · Dicht'], [3
 export const TOUR_W0 = 37.2;                 // the week the walk through the finished house begins
 
 export const C = {
-  paper: 0xf1f0e6, ink: 0x10241a, accent: 0x5fa512, lime: 0xc4f03e,
-  earth: 0x9B8468, earthDark: 0x7E6850, concrete: 0xA29E96, gravel: 0xC9C2B3,
-  clad: 0xE1D2B4, travertine: 0xE2D8C4, pave: 0xD5C8AC, plaster: 0xF4F1EA,
-  oak: 0xC9A679, soffit: 0xCFA676, teak: 0xB98F66, walnut: 0x694631,
-  frame: 0x262523, glass: 0xC6DCE0, water: 0x6FB3B4, steel: 0x565B60,
-  fabric: 0xE2DDD2, linen: 0xCFC6B4, leather: 0x8A5232, brass: 0xCFA862, terracotta: 0xB85D3B,
-  plant: 0x67784C, dark: 0x242321, machine: 0xDDA52E, cabin: 0xE4E2DA, mud: 0xD3C6B0, cloth: 0x2F6F3E,
+  paper: 0xeeedea, ink: 0x3d3492, accent: 0xffd23c, lime: 0xe8632a,
+  earth: 0x8A6F55, earthDark: 0x6F5943, concrete: 0xBDB9B0, gravel: 0xC9C2B3,
+  clad: 0xE3D5BA, travertine: 0xE3D5BA, pave: 0xDACBAE, plaster: 0xF4F1EA,
+  oak: 0xB98C56, soffit: 0xC69A62, teak: 0xC69A62, walnut: 0x7A5A3C,
+  frame: 0x262523, glass: 0xC6DCE0, water: 0x7FB9C6, steel: 0x565B60,
+  fabric: 0xE2DDD2, linen: 0xCFC6B4, leather: 0x7A5A3C, brass: 0xC9973A, terracotta: 0xA9714F,
+  plant: 0x6F8450, dark: 0x242321, machine: 0xE9B21E, cabin: 0xE4E2DA, mud: 0xA08A6C, cloth: 0x9AAA90,
 };
 
 // How finely things are cut and how rich the surfaces are, by the class of the device. buildHouse({ tier }) sets it.
@@ -108,8 +108,8 @@ export function groundAt(x, z, T) {
 // A sheet printed on the ground (variant B) may carry a second, small texture for the part that changes (uDyn).
 export function groundMaterial({ color = C.paper, map = null, contour = 0.2, mud = 0, dyn = null, dynRect = null } = {}) {
   const m = new THREE.MeshStandardMaterial({ color, map, roughness: 0.96, envMapIntensity: 0.2 });
-  const U = m.userData.u = { uMud: { value: mud }, uMudCol: { value: new THREE.Color(C.mud) }, uEarth: { value: new THREE.Color(0xB9A283) }, uInk: { value: new THREE.Color(C.ink).convertLinearToSRGB() }, uContour: { value: contour },
-    uLawn: { value: 0 }, uLawnA: { value: new THREE.Color(0xA4B182) }, uLawnB: { value: new THREE.Color(0x96A575) },
+  const U = m.userData.u = { uMud: { value: mud }, uMudCol: { value: new THREE.Color(C.mud) }, uEarth: { value: new THREE.Color(0x9C8467) }, uInk: { value: new THREE.Color(C.ink).convertLinearToSRGB() }, uContour: { value: contour },
+    uLawn: { value: 0 }, uLawnA: { value: new THREE.Color(0x86A05E) }, uLawnB: { value: new THREE.Color(0x7B9556) },
     uDig: { value: 0 }, uFill: { value: 0 }, uDyn: { value: dyn }, uDynRect: { value: new THREE.Vector4(...(dynRect || [0, 0, 1, 1])) } };
   if (dyn) m.defines = { USE_DYN: '' };
   m.onBeforeCompile = (s) => {
@@ -434,13 +434,13 @@ function getTextures() {
 
   // 9. A framed print for the living room wall, in the colours of the house
   const art1 = makeTex(512, 512, 1, 1, (g, w, h) => {
-    g.fillStyle = '#f1f0e6'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#eeedea'; g.fillRect(0, 0, w, h);
     const pad = 28;
-    g.fillStyle = '#e6e2d2'; g.fillRect(pad, pad, w - pad * 2, h - pad * 2);
-    g.fillStyle = '#10241a'; g.fillRect(pad + 14, pad + 14, 210, h - pad * 2 - 28);
-    g.fillStyle = '#c4f03e'; g.fillRect(pad + 236, pad + 14, w - pad * 2 - 250, 190);
-    g.fillStyle = '#b98f66'; g.fillRect(pad + 236, pad + 216, w - pad * 2 - 250, h - pad * 2 - 230);
-    g.fillStyle = '#f1f0e6'; g.beginPath(); g.arc(pad + 230, h * 0.52, 54, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#e3d5ba'; g.fillRect(pad, pad, w - pad * 2, h - pad * 2);
+    g.fillStyle = '#3d3492'; g.fillRect(pad + 14, pad + 14, 210, h - pad * 2 - 28);
+    g.fillStyle = '#9aaa90'; g.fillRect(pad + 236, pad + 14, w - pad * 2 - 250, 190);
+    g.fillStyle = '#b98c56'; g.fillRect(pad + 236, pad + 216, w - pad * 2 - 250, h - pad * 2 - 230);
+    g.fillStyle = '#eeedea'; g.beginPath(); g.arc(pad + 230, h * 0.52, 54, 0, Math.PI * 2); g.fill();
     addGrain(g, w, h, 12);
   });
   art1.wrapS = art1.wrapT = THREE.ClampToEdgeWrapping;
@@ -784,7 +784,7 @@ export function buildHouse(opts = {}) {
     walnut: C.walnut, travertine: C.travertine, ink: C.dark, linen: C.fabric, sofaDark: C.linen, brass: C.brass, plaster: C.plaster,
     soffit: C.soffit, cloth: C.cloth, teak: C.teak, oak: C.oak, leather: C.leather, steel: C.frame, conc: C.concrete, terracotta: C.terracotta,
     clad: C.clad, pave: C.pave, galv: C.steel, machine: C.machine, cabin: C.cabin,
-    book0: 0x8e3b2a, book1: 0x2f4a5a, book2: 0xd8cfb8, book3: 0x5c6b4a, book4: 0x1f1e1c,
+    book0: 0x8a6f55, book1: 0x7a5a3c, book2: 0xe3d5ba, book3: 0x9aaa90, book4: 0x1f1e1c,
   };
   function boxGroup(list) {
     const by = new Map(), eg = [];
@@ -968,7 +968,7 @@ export function buildHouse(opts = {}) {
     cabin.rotation.y = Math.PI / 2;
     const cabinAt = new THREE.Group(); cabinAt.add(cabin); cabinAt.position.set(-9.4, 0, -3.6);
     add(cabinAt, 0, 0.35, 'drop', { until: 36.0, ghost: false, h: 3, d: 0.3, info: ['Baucontainer', 'Stahl, gedämmt', '6,00 × 2,50 × 2,60 m'] });
-    add(box(1.1, 2.3, 1.1, 0x8FA0A6, -9.6, 0, 1.6), 0, 0.45, 'drop', { until: 36.0, ghost: false, d: 0.3, info: ['Bautoilette', 'Kunststoff'] });
+    add(box(1.1, 2.3, 1.1, 0xBDB9B0, -9.6, 0, 1.6), 0, 0.45, 'drop', { until: 36.0, ghost: false, d: 0.3, info: ['Bautoilette', 'Kunststoff'] });
     const skip = new THREE.Group();
     const sk = new THREE.ExtrudeGeometry(new THREE.Shape([[-2, 0], [2, 0], [2.6, 1.4], [-2.6, 1.4]].map(([u, v]) => new THREE.Vector2(u, v))), { depth: 1.8, bevelEnabled: false }).translate(0, 0, -0.9);
     skip.add(solid(sk, C.machine));

@@ -143,7 +143,7 @@ document.getElementById('stage').appendChild(renderer.domElement);
 document.body.classList.add('tier-' + tier);
 
 const scene = new THREE.Scene();
-const bgCol = new THREE.Color(DIR === 'c' ? 0xE1E5DC : C.paper);
+const bgCol = new THREE.Color(DIR === 'c' ? 0xDFE9EF : C.paper);
 scene.background = bgCol;
 scene.fog = new THREE.Fog(bgCol, 80, 230);
 
@@ -204,7 +204,7 @@ const SHEET = { x0: -12, x1: 40, z0: -15, z1: 24 };
 const SHEET_PX = low ? 40 : mid ? 56 : 78;   // pixels per metre of the sheet printed on the site
 const uvSheet = (x, z) => [(x - SHEET.x0) / (SHEET.x1 - SHEET.x0), 1 - (z - SHEET.z0) / (SHEET.z1 - SHEET.z0)];
 const GANTT_BOX = { x0: -9.5, x1: 23.5, z0: 9.6, z1: 21.6 }, GANTT_LAB = 7.2;
-const INK = '#10241a', LEAF = '#5fa512';
+const INK = '#3d3492', LEAF = '#ffd23c';
 const LABEL_FONT = "Arimo, 'Helvetica Neue', Arial, sans-serif", DISPLAY_FONT = "'BBH Bogle', Arimo, 'Arial Black', sans-serif";
 let planWalls = [];   // filled once the house is built; the sheet is drawn again then
 let sheetTex = null;      // the sheet itself: drawn once
@@ -213,9 +213,9 @@ let dynTex = null;        // the part of it that changes with the week: the bars
 let dynCanvas = null;
 // the strip of the sheet that is redrawn, in metres: the programme with its labels and the HEUTE line under it
 const DYN = { x0: GANTT_BOX.x0 - 0.2, x1: GANTT_BOX.x1 + 0.3, z0: GANTT_BOX.z0 + 0.1, z1: GANTT_BOX.z1 + 1.25 };
-const groundMat = DIR === 'b' ? groundMaterial({ color: 0xE9E9E4, map: drawSheet(), contour: 0, dyn: drawSheetNow(state.wk), dynRect: [DYN.x0, DYN.z0, DYN.x1 - DYN.x0, DYN.z1 - DYN.z0] })
-  : DIR === 'c' ? groundMaterial({ color: 0xD3D2B6, contour: 0.08, mud: 1 })
-  : groundMaterial({ color: 0xE2E0D3, contour: 0.2 });
+const groundMat = DIR === 'b' ? groundMaterial({ color: 0xE2E1E4, map: drawSheet(), contour: 0, dyn: drawSheetNow(state.wk), dynRect: [DYN.x0, DYN.z0, DYN.x1 - DYN.x0, DYN.z1 - DYN.z0] })
+  : DIR === 'c' ? groundMaterial({ color: 0xCBCFB0, contour: 0.08, mud: 1 })
+  : groundMaterial({ color: 0xE6E5E0, contour: 0.2 });
 
 const house = buildHouse({ tier, ghost: DIR === 'b', lawn: DIR !== 'b', groundMat, groundUV: DIR === 'b' ? uvSheet : null });
 scene.add(house.root);
@@ -363,9 +363,9 @@ updateSceneForWeek(state.wk, 1);
 // The colours follow the view options: higher contrast darkens every tone, larger labels scale the type.
 function chartLook() {
   const hi = !!prefs().contrast, big = prefs().large ? 1.16 : 1;
-  const rgb = hi ? '6,20,13' : '16,36,26';
+  const rgb = hi ? '36,29,104' : '61,52,146';
   const a = v => `rgba(${rgb},${Math.min(1, hi ? v * 1.7 : v)})`;
-  return { ink: `rgb(${rgb})`, a, leaf: hi ? '#3d7607' : '#5fa512', leafInk: hi ? '#2c5903' : '#3d7607', lime: '#c4f03e', paper: '#f1f0e6', rowLive: 'rgba(95,165,18,0.12)', big, font: "Arimo, 'Helvetica Neue', Arial, sans-serif" };
+  return { ink: `rgb(${rgb})`, a, leaf: '#ffd23c', leafInk: hi ? '#6b4500' : '#8a5b00', lime: '#ffd23c', paper: '#eeedea', rowLive: 'rgba(255,210,60,0.3)', big, font: "Arimo, 'Helvetica Neue', Arial, sans-serif" };
 }
 
 // The chart is drawn once for its size. What the week changes (the fill of the bars, the row in work, the
@@ -422,7 +422,7 @@ function makeChart(host, o = {}) {
     s += txt(0, base, compact ? 9 : 10, pad2(p.n + 1), L.a(0.6), { w: 700, ls: '0.02em', cls: 'no' });
     s += txt(compact ? (small ? 18 : 24) : 30, base, fs, p.name.toUpperCase(), L.ink, { w: 700, ls: small ? '0.03em' : '0.06em' });
     s += `<rect x="${X(p.w0)}" y="${by}" width="${Math.max(2, X(p.w1) - X(p.w0))}" height="${bh}" fill="url(#hatch)" stroke="${L.ink}" stroke-width="1"/>`;
-    s += `<rect class="fill" x="${X(p.w0)}" y="${by}" width="0" height="${bh}" fill="${L.ink}" visibility="hidden"/>`;
+    s += `<rect class="fill" x="${X(p.w0)}" y="${by}" width="0" height="${bh}" fill="${L.ink}" stroke="${L.ink}" stroke-width="1.2" visibility="hidden"/>`;
     if (showDur) s += txt(W, y + rowH / 2 + 3.5, 9, `${Math.round((p.w1 - p.w0) * 5)} T`, L.a(0.7), { w: 500, anchor: 'end', ls: '0.04em', cls: 'dur' });
     if (i < rows - 1) {
       const n = PHASES[i + 1];
@@ -442,7 +442,8 @@ function makeChart(host, o = {}) {
     }
   }
 
-  s += `<line class="today" x1="0" y1="0" x2="0" y2="${H - (compact ? 0 : msH - 6)}" stroke="${L.leaf}" stroke-width="2"/>`;
+  s += `<line class="today-bk" x1="0" y1="0" x2="0" y2="${H - (compact ? 0 : msH - 6)}" stroke="${L.ink}" stroke-width="5"/>`;
+  s += `<line class="today" x1="0" y1="0" x2="0" y2="${H - (compact ? 0 : msH - 6)}" stroke="${L.leaf}" stroke-width="2.6"/>`;
   s += `<rect class="today-box" x="0" y="${compact ? -11 : -7}" width="10" height="${16 * L.big}" fill="${L.ink}"/>`;
   s += `<text class="today-lab" x="0" y="${compact ? 0.5 * L.big : 4.5 * L.big}" font-family="${L.font}" font-size="${f(9)}" font-weight="700" fill="${L.lime}" text-anchor="middle" letter-spacing="0.08em"></text>`;
   host.innerHTML = s + '</svg>';
@@ -450,7 +451,7 @@ function makeChart(host, o = {}) {
   const svg = host.firstChild, at = (el, k, v) => { v = String(v); if (el && el.getAttribute(k) !== v) el.setAttribute(k, v); };
   const R = [...svg.querySelectorAll('.gantt-row')].map((g, i) => ({ p: PHASES[i], bg: g.querySelector('.row-bg'), no: g.querySelector('.no'), fill: g.querySelector('.fill'), dur: g.querySelector('.dur') }));
   const MS = [...svg.querySelectorAll('.ms')], MST = [...svg.querySelectorAll('.mst')];
-  const today = svg.querySelector('.today'), box = svg.querySelector('.today-box'), lab = svg.querySelector('.today-lab');
+  const today = svg.querySelector('.today'), todayBk = svg.querySelector('.today-bk'), box = svg.querySelector('.today-box'), lab = svg.querySelector('.today-lab');
   let labText = '';
   function update(T) {
     for (const { p, bg, no, fill, dur } of R) {
@@ -462,7 +463,7 @@ function makeChart(host, o = {}) {
     }
     MILESTONES.forEach(([w], i) => { const on = T >= w - 0.02; at(MS[i], 'fill', on ? L.leaf : L.paper); at(MST[i], 'font-weight', on ? 700 : 500); });
     const tx = X(T).toFixed(1);
-    at(today, 'x1', tx); at(today, 'x2', tx);
+    at(today, 'x1', tx); at(today, 'x2', tx); at(todayBk, 'x1', tx); at(todayBk, 'x2', tx);
     const text = small ? fmtDay(dateAt(T)).toUpperCase() : `HEUTE · ${fmtDay(dateAt(T)).toUpperCase()}`;
     if (text !== labText) { labText = text; lab.textContent = text; }
     const lw = (text.length * 6.4 + 14) * L.big, lx = Math.min(Math.max(X(T) - lw / 2, small ? 0 : x0), W - lw);
@@ -734,12 +735,12 @@ function ensureSheetBase() {
   cv.width = cw; cv.height = chh;
   const g = cv.getContext('2d');
   const X = x => (x - SHEET.x0) * PX, Z = z => (z - SHEET.z0) * PX;
-  const A = v => `rgba(16,36,26,${v})`;
-  g.fillStyle = '#f1f0e6'; g.fillRect(0, 0, cw, chh);
+  const A = v => `rgba(61,52,146,${v})`;
+  g.fillStyle = '#eeedea'; g.fillRect(0, 0, cw, chh);
   let s = 19;
   const r01 = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   for (let i = 0; i < 16000; i++) {
-    g.fillStyle = `rgba(60,80,55,${r01() * 0.04})`;
+    g.fillStyle = `rgba(61,52,146,${r01() * 0.04})`;
     g.fillRect(8 + r01() * (cw - 16), 8 + r01() * (chh - 16), 2 * K, 2 * K);
   }
   const line = (pts, w = 2, c = INK, dash = []) => { g.beginPath(); g.setLineDash(dash.map(d => d * PX)); pts.forEach(([x, z], i) => i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))); g.strokeStyle = c; g.lineWidth = w * 2.6 * K; g.stroke(); g.setLineDash([]); };
@@ -756,7 +757,7 @@ function ensureSheetBase() {
   // the grid: four axes down the slope, three across it
   const AX = [['A', 3.85], ['B', 7.0], ['C', 15.6], ['D', 18.15]], AZ = [['1', -7.85], ['2', -1.6], ['3', 3.85]];
   const bubble = (name, x, z) => {
-    g.beginPath(); g.arc(X(x), Z(z), 0.55 * PX, 0, Math.PI * 2); g.fillStyle = '#f1f0e6'; g.fill(); g.lineWidth = 3 * K; g.strokeStyle = INK; g.stroke();
+    g.beginPath(); g.arc(X(x), Z(z), 0.55 * PX, 0, Math.PI * 2); g.fillStyle = '#eeedea'; g.fill(); g.lineWidth = 3 * K; g.strokeStyle = INK; g.stroke();
     text(name, x, z + 0.03, 0.58, { align: 'center', base: 'middle', font: DISPLAY_FONT, weight: 400, ls: 0 });
   };
   for (const [name, x] of AX) { line([[x, -12.4], [x, 7.2]], 2, A(0.55), [0.9, 0.18, 0.12, 0.18]); bubble(name, x, -13.0); }
@@ -827,7 +828,7 @@ function ensureSheetBase() {
   text('FUNDAMENTPLAN UND BAUZEITENPLAN', tb.x0 + 0.5, tb.z0 + 4.1, 0.34);
   text('STAHLBETON, TRAVERTIN · BGF 480 M²', tb.x0 + 0.5, tb.z0 + 4.8, 0.34);
   text('BLATT A-905   REV C   M 1:1', tb.x0 + 0.5, tb.z0 + 6.5, 0.34);
-  text('SCHLÜSSEL FR 19. NOV 2027', tb.x0 + 0.5, tb.z0 + 7.2, 0.34, { color: '#3d7607', weight: 700 });
+  text('SCHLÜSSEL FR 19. NOV 2027', tb.x0 + 0.5, tb.z0 + 7.2, 0.34, { color: '#8a5b00', weight: 700 });
   text('KONZEPT, UX, THREE.JS', tb.x0 + 0.5, tb.z0 + 8.65, 0.3, { color: A(0.75) });
   text('MICHA SCHWAN · UX DESIGNER', tb.x0 + 0.5, tb.z0 + 9.3, 0.34, { weight: 700 });
 
@@ -863,21 +864,23 @@ function drawSheetNow(T) {
     const live = T >= p.w0 && T < p.w1;
     g.font = `700 ${0.36 * PX}px ${LABEL_FONT}`;
     g.letterSpacing = `${0.03 * PX}px`;
-    g.fillStyle = live ? '#3d7607' : INK;
+    g.fillStyle = live ? '#8a5b00' : INK;
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
     g.fillText(`${pad2(p.n + 1)}  ${p.name.toUpperCase()}`, X(P.x0), Z(z + rowH * 0.66));
     const pe = Math.min(T, p.w1);
     if (pe > p.w0) {
       g.fillStyle = live ? LEAF : INK;
       g.fillRect(X(wx(p.w0)), Z(bz), (wx(pe) - wx(p.w0)) * PX, bh * PX);
+      if (live) { g.lineWidth = 0.04 * PX; g.strokeStyle = INK; g.strokeRect(X(wx(p.w0)), Z(bz), (wx(pe) - wx(p.w0)) * PX, bh * PX); }
     }
   });
   g.beginPath();
   g.moveTo(X(wx(T)), Z(P.z0 + 0.2));
   g.lineTo(X(wx(T)), Z(P.z1 + 0.35));
+  g.strokeStyle = INK; g.lineWidth = 0.15 * PX; g.stroke();
   g.strokeStyle = LEAF; g.lineWidth = 0.075 * PX; g.stroke();
   g.font = `700 ${0.34 * PX}px ${LABEL_FONT}`;
-  g.fillStyle = '#3d7607';
+  g.fillStyle = '#8a5b00';
   const lab = `HEUTE ${fmtDay(dateAt(T)).toUpperCase()}`;
   g.textAlign = T > WEEKS * 0.8 ? 'right' : 'left';
   g.fillText(lab, X(wx(T) + (T > WEEKS * 0.8 ? -0.3 : 0.3)), Z(P.z1 + 0.95));

@@ -13,7 +13,7 @@ Drei Varianten mit demselben Code: `?dir=a` der Bauzeitenplan (die Hauptdemo), `
 - **Eine Tabelle steuert alles.** `PHASES` in `house.js` (Name, Startwoche, Endwoche) zeichnet die Balken und entscheidet, wann jedes Teil des Hauses existiert. Der Scroll ist ein Datum, und Diagramm und Modell lesen dieselbe Zahl.
 - **Jedes Teil kennt seine Phase.** `add(obj, phase, order, how)` platziert es innerhalb seines Phasenbalkens, und es kommt per Kran, wächst hoch, wächst nach oder erscheint. `update(week)` ist eine reine Funktion der Woche, deshalb funktioniert auch das Zurückscrollen.
 - **Das Haus ist eine Liste.** Wände, Decken und Dächer stehen als Zeilen mit Maßen in `house.js`. `wall()` teilt eine Wand in Fertigteile von etwa 3,30 m, `slab()` eine Decke in Streifen, und beide hängen die Oberflächen an, die später darüber kommen: Travertin außen, Putz und Eiche innen, Holz unter den Auskragungen.
-- **Aktiv ist grün.** Die aktive Phase füllt sich im Diagramm grün, und das Teil, das gerade gesetzt wird, bekommt grüne Kanten.
+- **Was in Arbeit ist, ist markiert.** Wie auf einer Lichtpause mit Textmarker: Die aktive Phase füllt sich im Diagramm gelb, die Heute-Linie ist gelb, und das Teil, das gerade gesetzt wird, bekommt gelbe Kanten. Alles Gebaute ist violett gezeichnet oder in den Baustoffen des Hauses gehalten.
 - **Jedes Teil hat einen Namen.** Beim Anlegen bekommt jedes Bauteil eine Zeile mit Bezeichnung, Maßen und Material (`info` in `add()`). `label()` liefert das Teil, das gerade in Arbeit ist, und die Seite zeigt es als Schild mit Hinweislinie am Bauteil und in der Anzeige unten links.
 - **Die Baustelle lebt.** `site.js` stellt alles dazu, was nicht zum Haus gehört: Bagger, Kipper, Fahrmischer und Tieflader, Deckenstützen unter jeder Decke, das Fassadengerüst, Absturzsicherung, Materiallager, Bauschild und Figuren mit Helm, jedes mit den Wochen, in denen es da ist.
 - **Der Hang ist ein Netz.** `buildGround()` hebt die Baugrube aus und verfüllt sie wieder. Höhenlinien im Abstand von 50 cm lassen das Gelände wie einen Lageplan lesen. In den letzten Wochen wächst der Rasen vom Haus aus über den Hang.
@@ -34,7 +34,7 @@ Ebenen auf -3,20 (Poolgeschoss), 0,00 (Wohngeschoss) und +3,20 (Obergeschoss), D
 
 ## Farben und Schriften
 
-Papier `#f1f0e6`, Waldgrün `#10241a`, Blattgrün `#5fa512`, Limette `#c4f03e`. BBH Bogle für Überschriften, Arimo für alles, was gelesen wird. Beide Schriften liegen in `fonts/` (SIL Open Font License, Lizenztexte daneben). BBH Bogle enthält keine Umlaute, deshalb kommen die Überschriften ohne aus.
+Das Medium ist eine Lichtpause (Diazo): Papier `#eeedea`, Diazoviolett `#3d3492` für alle Linien, Schrift, Balken und Höhenlinien (dunkle Tafeln in tiefem Indigo `#231d5e`), Textmarker-Gelb `#ffd23c` als einzige Akzentfarbe für das, was gerade in Arbeit ist (kleine Schrift auf Papier in `#8a5b00`). Noch nicht Gebautes ist papierweiß mit violetten Kanten, Gebautes hat die Baustoffe aus Demo 4: Travertin, Beton, Eiche, Nussbaum, Schalungsgelb, Rasen `#86a05e`. BBH Bogle für Überschriften, Arimo für alles, was gelesen wird. Beide Schriften liegen in `fonts/` (SIL Open Font License, Lizenztexte daneben). BBH Bogle enthält keine Umlaute, deshalb kommen die Überschriften ohne aus.
 
 ## Dateien
 
