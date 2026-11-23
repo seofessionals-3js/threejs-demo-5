@@ -1,4 +1,6 @@
-# three.js Demo 5 · Projekt Steininger
+# three.js Demo 4 · Projekt Steininger
+
+In der Übersicht und in der durchlaufenden Schau ist das die Nummer 4; das Repository heißt weiter `threejs-demo-5`, damit alle Adressen gültig bleiben.
 
 Der Bauzeitenplan von Projekt Steininger, angedockt am unteren Bildschirmrand, und darüber die Baustelle am Hang. Mit dem Mausrad bewegt sich die Heute-Linie durch 38 Wochen: Ein Bauzaun entsteht, der Hang wird ausgehoben, ein Turmdrehkran setzt jedes Wandelement, jede Deckenplatte und jede Scheibe, während sich der zugehörige Balken füllt. Ein Schild am Bauteil nennt, was gerade gesetzt wird, mit Maßen und Material. Dann kommen Travertin, Eichendielen, der Pool und die Möbel. Bei der Übergabe öffnet sich die Tür zum Hof, und Sie gehen durch das Wohngeschoss, die Treppe hinab ins Poolgeschoss und hinaus an den Pool. Scrollen Sie zurück, und das Haus baut sich wieder ab.
 
@@ -23,7 +25,7 @@ Drei Varianten mit demselben Code: `?dir=a` der Bauzeitenplan (die Hauptdemo), `
 
 ## Das Haus in Zahlen
 
-Ebenen auf -3,20 (Poolgeschoss), 0,00 (Wohngeschoss) und +3,20 (Obergeschoss), Dächer auf +6,80 und +7,60. Grundfläche 14,6 mal 12 m in zwei Feldern. Der obere Baukörper des Nordfelds kragt 4,8 m über den Balkon aus. Der Pool misst 6,6 mal 11,2 m und steht auf der Böschung unter der Terrasse. Es ist dasselbe Haus wie in [Demo 4](https://seofessionals-3js.github.io/threejs-demo-4/).
+Ebenen auf -3,20 (Poolgeschoss), 0,00 (Wohngeschoss) und +3,20 (Obergeschoss), Dächer auf +6,80 und +7,60. Grundfläche 14,6 mal 12 m in zwei Feldern. Der obere Baukörper des Nordfelds kragt 4,8 m über den Balkon aus. Der Pool misst 6,6 mal 11,2 m und steht auf der Böschung unter der Terrasse. Es ist dasselbe Haus wie in [Demo 2](https://seofessionals-3js.github.io/threejs-demo-4/), dem Bauzeitraffer.
 
 ## Bedienung und Barrierefreiheit
 
